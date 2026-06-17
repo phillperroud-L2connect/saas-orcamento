@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import LogoutButton from "./logout-button";
@@ -36,6 +37,14 @@ export default async function DashboardPage() {
           Você está autenticado no Gerador de Orçamento.
         </p>
         <div className="mt-6">
+          <Link
+            href="/dashboard/orcamentos"
+            className="inline-flex w-full items-center justify-center rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
+          >
+            Orçamentos
+          </Link>
+        </div>
+        <div className="mt-3">
           <LogoutButton />
         </div>
       </div>
