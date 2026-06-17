@@ -13,6 +13,10 @@ export type Cliente = {
   created_at: string;
 };
 
+export type Pais = "BR" | "AR";
+export type Idioma = "pt" | "es";
+export type MoedaPreferida = "BRL" | "ARS" | "USD";
+
 export type Tenant = {
   id: string;
   nome_empresa: string;
@@ -21,6 +25,10 @@ export type Tenant = {
   telefone: string | null;
   logo_url: string | null;
   cor_primaria: string | null;
+  pais: Pais;
+  idioma: Idioma;
+  moeda_preferida: MoedaPreferida | null;
+  ativo: boolean;
   created_at: string;
 };
 
