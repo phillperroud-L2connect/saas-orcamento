@@ -11,6 +11,10 @@ type ServicoItem = {
   valor: string;
 };
 
+type OpcaoPagamento = "unico" | "entrada_restante" | "parcelado";
+type TipoParcelamento = "iguais" | "entrada_diferenciada";
+type TipoEntrada = "percentual" | "valor";
+
 type FormState = {
   cliente_id: string;
   cliente_nome: string;
@@ -18,6 +22,13 @@ type FormState = {
   cliente_telefone: string;
   servicos: ServicoItem[];
   nota: string;
+  // ── Pagamento ──
+  opcao_pagamento: OpcaoPagamento;
+  percentual_entrada: string; // Opção 2 (entrada + restante)
+  parcelas: string; // Opção 3 (2 a 12)
+  tipo_parcelamento: TipoParcelamento; // Opção 3
+  entrada_tipo: TipoEntrada; // Opção 3 — entrada diferenciada
+  entrada_valor: string; // Opção 3 — valor ou % da entrada diferenciada
 };
 
 const emptyForm: FormState = {
@@ -27,7 +38,32 @@ const emptyForm: FormState = {
   cliente_telefone: "",
   servicos: [{ id: "1", descricao: "", valor: "" }],
   nota: "",
+  opcao_pagamento: "unico",
+  percentual_entrada: "50",
+  parcelas: "2",
+  tipo_parcelamento: "iguais",
+  entrada_tipo: "percentual",
+  entrada_valor: "30",
 };
+
+/** Plano de pagamento calculado a partir do total e das escolhas do formulário. */
+type PlanoPagamento =
+  | { tipo: "unico"; resumo: string }
+  | {
+      tipo: "entrada_restante";
+      pct: number;
+      entrada: number;
+      restante: number;
+      resumo: string;
+    }
+  | {
+      tipo: "parcelado";
+      n: number;
+      subtipo: TipoParcelamento;
+      pctEntrada: number;
+      parcelas: { numero: number; valor: number; entrada: boolean }[];
+      resumo: string;
+    };
 
 /** Rótulos fixos em português — sem opção de troca de idioma. */
 const t = {
@@ -42,8 +78,6 @@ const t = {
   valor: "Valor",
   total: "Total",
   pagamento: "Condições de Pagamento",
-  entrada: "50% na entrada",
-  entrega: "50% na entrega",
   validade: "Validade",
   validade_val: "30 dias",
   rodape: "Obrigado pela preferência!",
@@ -67,6 +101,84 @@ function fmtBRL(v: number) {
     style: "currency",
     currency: "BRL",
   }).format(v);
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * Converte o total + escolhas de pagamento em um plano estruturado.
+ * Usado tanto na prévia/PDF quanto na hora de salvar no banco.
+ */
+function calcularPlano(total: number, form: FormState): PlanoPagamento {
+  if (form.opcao_pagamento === "entrada_restante") {
+    const pct = clamp(parseFloat(form.percentual_entrada) || 0, 0, 100);
+    const entrada = (total * pct) / 100;
+    const restante = total - entrada;
+    return {
+      tipo: "entrada_restante",
+      pct,
+      entrada,
+      restante,
+      resumo: `Entrada de ${pct}% (${fmtBRL(entrada)}) + restante de ${fmtBRL(
+        restante,
+      )} — 2 pagamentos separados.`,
+    };
+  }
+
+  if (form.opcao_pagamento === "parcelado") {
+    const n = clamp(parseInt(form.parcelas, 10) || 2, 2, 12);
+
+    if (form.tipo_parcelamento === "entrada_diferenciada") {
+      const bruto =
+        form.entrada_tipo === "percentual"
+          ? (total * (parseFloat(form.entrada_valor) || 0)) / 100
+          : parseFloat(form.entrada_valor) || 0;
+      const entrada = clamp(bruto, 0, total);
+      const pctEntrada = total > 0 ? (entrada / total) * 100 : 0;
+      const nRest = n - 1;
+      const valorRest = nRest > 0 ? (total - entrada) / nRest : 0;
+      const parcelas = [
+        { numero: 1, valor: entrada, entrada: true },
+        ...Array.from({ length: nRest }, (_, i) => ({
+          numero: i + 2,
+          valor: valorRest,
+          entrada: false,
+        })),
+      ];
+      return {
+        tipo: "parcelado",
+        n,
+        subtipo: "entrada_diferenciada",
+        pctEntrada,
+        parcelas,
+        resumo: `Entrada de ${fmtBRL(entrada)} + ${nRest}x de ${fmtBRL(
+          valorRest,
+        )}.`,
+      };
+    }
+
+    const valor = total / n;
+    const parcelas = Array.from({ length: n }, (_, i) => ({
+      numero: i + 1,
+      valor,
+      entrada: false,
+    }));
+    return {
+      tipo: "parcelado",
+      n,
+      subtipo: "iguais",
+      pctEntrada: 0,
+      parcelas,
+      resumo: `${n}x de ${fmtBRL(valor)} (parcelas iguais).`,
+    };
+  }
+
+  return {
+    tipo: "unico",
+    resumo: `Pagamento à vista — ${fmtBRL(total)}.`,
+  };
 }
 
 const inputCls =
@@ -159,6 +271,11 @@ export function OrcamentosManager() {
     }));
   }
 
+  function updateForm<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+    setSalvo(false);
+  }
+
   function updateServico(id: string, field: "descricao" | "valor", value: string) {
     setForm((f) => ({
       ...f,
@@ -173,7 +290,7 @@ export function OrcamentosManager() {
     (sum, s) => sum + (parseFloat(s.valor) || 0),
     0,
   );
-  const parcela = total / 2;
+  const plano = calcularPlano(total, form);
 
   // Cor de destaque do orçamento: cor primária do tenant ou fallback escuro.
   const cor = tenant?.cor_primaria || "#0F0F0F";
@@ -210,9 +327,15 @@ export function OrcamentosManager() {
         total,
         moeda: "BRL",
         status: "rascunho",
-        opcao_pagamento: "entrada_restante",
-        parcelas: 1,
-        percentual_entrada: 50,
+        opcao_pagamento: form.opcao_pagamento,
+        parcelas: plano.tipo === "parcelado" ? plano.n : 1,
+        percentual_entrada:
+          plano.tipo === "entrada_restante"
+            ? plano.pct
+            : plano.tipo === "parcelado" &&
+              plano.subtipo === "entrada_diferenciada"
+            ? Number(plano.pctEntrada.toFixed(2))
+            : 0,
       })
       .select("id")
       .single();
@@ -394,6 +517,204 @@ export function OrcamentosManager() {
                 {fmtBRL(total)}
               </span>
             </div>
+          </section>
+
+          {/* Forma de pagamento */}
+          <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900">
+              Forma de Pagamento
+            </h3>
+
+            {/* Seletor das 3 opções */}
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(
+                [
+                  {
+                    v: "unico",
+                    titulo: "Pagamento único",
+                    desc: "À vista, valor total",
+                  },
+                  {
+                    v: "entrada_restante",
+                    titulo: "Entrada + restante",
+                    desc: "Dois pagamentos",
+                  },
+                  { v: "parcelado", titulo: "Parcelado", desc: "De 2x a 12x" },
+                ] as const
+              ).map((opt) => {
+                const ativo = form.opcao_pagamento === opt.v;
+                return (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => updateForm("opcao_pagamento", opt.v)}
+                    className={`rounded-lg border p-3 text-left transition ${
+                      ativo
+                        ? "border-gray-900 bg-gray-50 ring-1 ring-gray-900"
+                        : "border-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-gray-900">
+                      {opt.titulo}
+                    </div>
+                    <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Opção 2 — entrada + restante */}
+            {form.opcao_pagamento === "entrada_restante" && (
+              <div className="space-y-3 rounded-lg bg-gray-50 p-3">
+                <div>
+                  <label htmlFor="pct_entrada" className={labelCls}>
+                    Percentual de entrada (%)
+                  </label>
+                  <input
+                    id="pct_entrada"
+                    className={inputCls}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={form.percentual_entrada}
+                    onChange={(e) =>
+                      updateForm("percentual_entrada", e.target.value)
+                    }
+                  />
+                </div>
+                {plano.tipo === "entrada_restante" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-white p-2 text-center">
+                      <div className="text-xs text-gray-500">
+                        Entrada ({plano.pct}%)
+                      </div>
+                      <div className="font-bold text-gray-900">
+                        {fmtBRL(plano.entrada)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-white p-2 text-center">
+                      <div className="text-xs text-gray-500">
+                        Restante ({(100 - plano.pct).toFixed(0)}%)
+                      </div>
+                      <div className="font-bold text-gray-900">
+                        {fmtBRL(plano.restante)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Opção 3 — parcelado */}
+            {form.opcao_pagamento === "parcelado" && (
+              <div className="space-y-3 rounded-lg bg-gray-50 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="parcelas" className={labelCls}>
+                      Número de parcelas
+                    </label>
+                    <select
+                      id="parcelas"
+                      className={inputCls}
+                      value={form.parcelas}
+                      onChange={(e) => updateForm("parcelas", e.target.value)}
+                    >
+                      {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
+                        <option key={n} value={n}>
+                          {n}x
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="tipo_parc" className={labelCls}>
+                      Tipo de parcelamento
+                    </label>
+                    <select
+                      id="tipo_parc"
+                      className={inputCls}
+                      value={form.tipo_parcelamento}
+                      onChange={(e) =>
+                        updateForm(
+                          "tipo_parcelamento",
+                          e.target.value as TipoParcelamento,
+                        )
+                      }
+                    >
+                      <option value="iguais">Parcelas iguais</option>
+                      <option value="entrada_diferenciada">
+                        Entrada diferenciada
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                {form.tipo_parcelamento === "entrada_diferenciada" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="entrada_tipo" className={labelCls}>
+                        Entrada em
+                      </label>
+                      <select
+                        id="entrada_tipo"
+                        className={inputCls}
+                        value={form.entrada_tipo}
+                        onChange={(e) =>
+                          updateForm(
+                            "entrada_tipo",
+                            e.target.value as TipoEntrada,
+                          )
+                        }
+                      >
+                        <option value="percentual">Percentual (%)</option>
+                        <option value="valor">Valor (R$)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="entrada_valor" className={labelCls}>
+                        {form.entrada_tipo === "percentual"
+                          ? "% da entrada"
+                          : "Valor da entrada (R$)"}
+                      </label>
+                      <input
+                        id="entrada_valor"
+                        className={inputCls}
+                        type="number"
+                        min="0"
+                        step={form.entrada_tipo === "percentual" ? "1" : "0.01"}
+                        value={form.entrada_valor}
+                        onChange={(e) =>
+                          updateForm("entrada_valor", e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {plano.tipo === "parcelado" && (
+                  <div className="rounded-lg bg-white p-2">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {plano.parcelas.map((p) => (
+                          <tr
+                            key={p.numero}
+                            className="border-b border-gray-100 last:border-0"
+                          >
+                            <td className="py-1.5 text-gray-600">
+                              {p.entrada ? "Entrada" : `Parcela ${p.numero}`}
+                            </td>
+                            <td className="py-1.5 text-right font-semibold text-gray-900">
+                              {fmtBRL(p.valor)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           {/* Nota */}
@@ -662,41 +983,143 @@ export function OrcamentosManager() {
               >
                 {t.pagamento}
               </div>
-              <div style={{ padding: "16px", display: "flex", gap: "16px" }}>
-                <div
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    background: "#fff",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                    padding: "16px",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                    {t.entrada}
+              <div style={{ padding: "16px" }}>
+                {/* Opção 1 — pagamento único */}
+                {plano.tipo === "unico" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: "13px", color: "#555" }}>
+                      Pagamento à vista
+                    </span>
+                    <span
+                      style={{ fontSize: "22px", fontWeight: 800, color: cor }}
+                    >
+                      {fmtBRL(total)}
+                    </span>
                   </div>
-                  <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                    {fmtBRL(parcela)}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    background: "#fff",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                    padding: "16px",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                    {t.entrega}
-                  </div>
-                  <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                    {fmtBRL(parcela)}
-                  </div>
-                </div>
+                )}
+
+                {/* Opção 2 — entrada + restante */}
+                {plano.tipo === "entrada_restante" && (
+                  <>
+                    <div style={{ display: "flex", gap: "16px" }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          textAlign: "center",
+                          background: "#fff",
+                          border: "1px solid #e5e7eb",
+                          borderRadius: "8px",
+                          padding: "16px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#666",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          Entrada ({plano.pct}%)
+                        </div>
+                        <div
+                          style={{ fontSize: "20px", fontWeight: 800, color: cor }}
+                        >
+                          {fmtBRL(plano.entrada)}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          flex: 1,
+                          textAlign: "center",
+                          background: "#fff",
+                          border: "1px solid #e5e7eb",
+                          borderRadius: "8px",
+                          padding: "16px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#666",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          Restante ({(100 - plano.pct).toFixed(0)}%)
+                        </div>
+                        <div
+                          style={{ fontSize: "20px", fontWeight: 800, color: cor }}
+                        >
+                          {fmtBRL(plano.restante)}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: "12px",
+                        fontSize: "11px",
+                        color: "#888",
+                        textAlign: "center",
+                      }}
+                    >
+                      * São 2 pagamentos separados: entrada e restante na entrega.
+                    </div>
+                  </>
+                )}
+
+                {/* Opção 3 — parcelado */}
+                {plano.tipo === "parcelado" && (
+                  <>
+                    <div
+                      style={{
+                        marginBottom: "10px",
+                        fontSize: "12px",
+                        color: "#555",
+                      }}
+                    >
+                      {plano.subtipo === "entrada_diferenciada"
+                        ? `Parcelado em ${plano.n}x com entrada diferenciada`
+                        : `Parcelado em ${plano.n}x iguais`}
+                    </div>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <tbody>
+                        {plano.parcelas.map((p) => (
+                          <tr key={p.numero}>
+                            <td
+                              style={{
+                                padding: "8px 12px",
+                                borderBottom: "1px solid #eee",
+                                fontSize: "12px",
+                                color: "#444",
+                              }}
+                            >
+                              {p.entrada
+                                ? "Entrada (1ª parcela)"
+                                : `Parcela ${p.numero}`}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 12px",
+                                borderBottom: "1px solid #eee",
+                                textAlign: "right",
+                                fontWeight: 700,
+                                color: cor,
+                                fontSize: "13px",
+                              }}
+                            >
+                              {fmtBRL(p.valor)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
               </div>
             </div>
 
