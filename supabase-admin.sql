@@ -1,27 +1,22 @@
--- =============================================================================
--- SaaS Gerador de Orçamento — Etapa 6: Painel Admin
--- =============================================================================
+-- SaaS Gerador de Orcamento - Etapa 6: Painel Admin
 -- Execute este script UMA VEZ no SQL Editor do Supabase
--- (Dashboard -> SQL Editor -> New query -> colar -> Run).
+-- (Dashboard > SQL Editor > New query > colar > Run).
 --
--- Ele faz três coisas:
---   1. Adiciona a coluna tenants.moeda_preferida (usada quando país = AR)
---   2. Cria políticas RLS que liberam a tabela tenants INTEIRA para o admin
---   3. Cria o bucket de Storage "logos" e suas políticas de acesso
--- =============================================================================
+-- Ele faz tres coisas:
+--   1. Adiciona a coluna tenants.moeda_preferida (usada quando pais = AR)
+--   2. Cria politicas RLS que liberam a tabela tenants inteira para o admin
+--   3. Cria o bucket de Storage "logos" e suas politicas de acesso
 
--- -----------------------------------------------------------------------------
--- 1. Coluna de moeda preferida (BR usa BRL implícito; AR escolhe ARS ou USD)
--- -----------------------------------------------------------------------------
+
+-- 1. Coluna de moeda preferida (BR usa BRL implicito; AR escolhe ARS ou USD)
 alter table public.tenants
   add column if not exists moeda_preferida text
     check (moeda_preferida in ('BRL', 'ARS', 'USD'));
 
--- -----------------------------------------------------------------------------
--- 2. RLS: acesso total à tabela tenants apenas para o e-mail do dono do SaaS.
---    Políticas permissivas são combinadas com OR — esta convive com a
---    tenants_isolation existente (cada usuário continua vendo só o seu tenant).
--- -----------------------------------------------------------------------------
+
+-- 2. RLS: acesso total a tabela tenants apenas para o e-mail do dono do SaaS.
+-- Politicas permissivas sao combinadas com OR, entao esta convive com a
+-- tenants_isolation existente (cada usuario continua vendo so o seu tenant).
 drop policy if exists tenants_admin_all on public.tenants;
 create policy tenants_admin_all on public.tenants
   for all
@@ -29,14 +24,13 @@ create policy tenants_admin_all on public.tenants
   using ((auth.jwt() ->> 'email') = 'phillperroud@gmail.com')
   with check ((auth.jwt() ->> 'email') = 'phillperroud@gmail.com');
 
--- -----------------------------------------------------------------------------
--- 3. Storage: bucket público "logos" para as imagens das marcas.
--- -----------------------------------------------------------------------------
+
+-- 3. Storage: bucket publico "logos" para as imagens das marcas.
 insert into storage.buckets (id, name, public)
 values ('logos', 'logos', true)
 on conflict (id) do update set public = true;
 
--- Leitura pública (os logos aparecem nos orçamentos / PDFs via URL pública).
+-- Leitura publica (os logos aparecem nos orcamentos / PDFs via URL publica).
 drop policy if exists logos_public_read on storage.objects;
 create policy logos_public_read on storage.objects
   for select
@@ -55,7 +49,3 @@ create policy logos_admin_write on storage.objects
     bucket_id = 'logos'
     and (auth.jwt() ->> 'email') = 'phillperroud@gmail.com'
   );
-
--- =============================================================================
--- FIM
--- =============================================================================
