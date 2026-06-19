@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { isAdminUser } from "@/lib/admin";
 
 // Rotas públicas — acessíveis sem autenticação.
-const ROTAS_PUBLICAS = ["/login", "/cadastro"];
+const ROTAS_PUBLICAS = ["/login", "/cadastro", "/admin/login"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -46,15 +46,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Já logado tentando acessar login/cadastro -> /dashboard
+  // Já logado tentando acessar login/cadastro -> /dashboard.
+  // Exceção: admin em /login ou /cadastro vai direto para o painel /admin.
   if (user && ehRotaPublica) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const ehLoginOuCadastro =
+      pathname.startsWith("/login") || pathname.startsWith("/cadastro");
+    url.pathname =
+      isAdminUser(user) && ehLoginOuCadastro ? "/admin" : "/dashboard";
     return NextResponse.redirect(url);
   }
 
   // Painel admin: restrito ao e-mail do dono do SaaS.
-  if (pathname.startsWith("/admin") && !isAdminUser(user)) {
+  // /admin/login é público (a própria página trata o acesso indevido).
+  if (
+    pathname.startsWith("/admin") &&
+    pathname !== "/admin/login" &&
+    !isAdminUser(user)
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
