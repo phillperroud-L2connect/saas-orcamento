@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdminUser } from "@/lib/admin";
 
 export const metadata = {
   title: "Painel Admin — Gerador de Orçamento",
@@ -20,7 +20,7 @@ export default async function AdminLayout({
   // Camada de servidor: só o e-mail admin passa. Qualquer outro usuário
   // autenticado é mandado de volta ao dashboard.
   if (!user) redirect("/login");
-  if (!isAdminEmail(user.email)) redirect("/dashboard");
+  if (!isAdminUser(user)) redirect("/dashboard");
 
   return (
     <div className="min-h-screen bg-gray-50">

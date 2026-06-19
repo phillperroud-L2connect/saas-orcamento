@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdminUser } from "@/lib/admin";
 
 // Rotas públicas — acessíveis sem autenticação.
 const ROTAS_PUBLICAS = ["/login", "/cadastro"];
@@ -54,7 +54,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Painel admin: restrito ao e-mail do dono do SaaS.
-  if (pathname.startsWith("/admin") && !isAdminEmail(user?.email)) {
+  if (pathname.startsWith("/admin") && !isAdminUser(user)) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
