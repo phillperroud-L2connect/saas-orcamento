@@ -224,8 +224,8 @@ function calcularPlano(total: number, form: FormState): PlanoPagamento {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
-const labelCls = "block text-sm font-medium text-gray-700 mb-1";
+  "w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
+const labelCls = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
 
 export function OrcamentosManager() {
   const supabase = createClient();
@@ -748,8 +748,8 @@ export function OrcamentosManager() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Orçamentos</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Orçamentos</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Gere orçamentos profissionais em PDF e salve no histórico.
         </p>
       </div>
@@ -758,7 +758,7 @@ export function OrcamentosManager() {
         {/* ── Formulário ── */}
         <div className="space-y-5">
           {/* Modelos de orçamento */}
-          <section className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <section className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
             <div className="min-w-[180px] flex-1">
               <label htmlFor="modelo" className={labelCls}>
                 Carregar modelo
@@ -787,7 +787,7 @@ export function OrcamentosManager() {
               onClick={salvarComoModelo}
               disabled={salvandoModelo || total === 0}
               title="Salvar os serviços, pagamento e observações atuais como modelo reutilizável"
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60"
             >
               <BookmarkPlus className="size-4" />
               {salvandoModelo ? "Salvando..." : "Salvar como modelo"}
@@ -795,8 +795,8 @@ export function OrcamentosManager() {
           </section>
 
           {/* Cliente */}
-          <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">
+          <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Dados do Cliente
             </h3>
 
@@ -837,7 +837,7 @@ export function OrcamentosManager() {
                   autoComplete="off"
                 />
                 {mostrarSugestoes && sugestoes.length > 0 && (
-                  <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                  <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-1 shadow-lg">
                     {sugestoes.map((c) => (
                       <li key={c.id}>
                         <button
@@ -847,13 +847,13 @@ export function OrcamentosManager() {
                             e.preventDefault();
                             aplicarSugestao(c);
                           }}
-                          className="flex w-full flex-col items-start px-3 py-2 text-left transition hover:bg-gray-50"
+                          className="flex w-full flex-col items-start px-3 py-2 text-left transition hover:bg-gray-50 dark:hover:bg-gray-800"
                         >
-                          <span className="text-sm font-medium text-gray-900">
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             {c.nome}
                           </span>
                           {(c.email || c.telefone) && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
                               {[c.email, c.telefone]
                                 .filter(Boolean)
                                 .join(" · ")}
@@ -926,8 +926,8 @@ export function OrcamentosManager() {
           </section>
 
           {/* Serviços */}
-          <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">Serviços</h3>
+          <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Serviços</h3>
 
             {form.servicos.map((s, i) => (
               <div key={s.id} className="flex items-start gap-2">
@@ -964,7 +964,7 @@ export function OrcamentosManager() {
                     }
                     title="Escolher de Meus Serviços"
                     aria-label="Escolher de Meus Serviços"
-                    className="mt-1 rounded-lg border border-gray-300 p-2 text-gray-600 transition hover:bg-gray-50"
+                    className="mt-1 rounded-lg border border-gray-300 dark:border-gray-700 p-2 text-gray-600 dark:text-gray-300 transition hover:bg-gray-50 dark:hover:bg-gray-800"
                   >
                     <ListPlus className="size-4" />
                   </button>
@@ -976,9 +976,9 @@ export function OrcamentosManager() {
                         className="fixed inset-0 z-10"
                         onClick={() => setCatalogoAbertoId(null)}
                       />
-                      <ul className="absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                      <ul className="absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-1 shadow-lg">
                         {catalogo.length === 0 ? (
-                          <li className="px-3 py-3 text-center text-xs text-gray-500">
+                          <li className="px-3 py-3 text-center text-xs text-gray-500 dark:text-gray-400">
                             Nenhum serviço cadastrado.
                             <br />
                             Cadastre em “Meus Serviços”.
@@ -991,12 +991,12 @@ export function OrcamentosManager() {
                                 onClick={() =>
                                   aplicarServicoCatalogo(s.id, serv)
                                 }
-                                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-gray-50"
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-gray-50 dark:hover:bg-gray-800"
                               >
-                                <span className="truncate text-sm text-gray-900">
+                                <span className="truncate text-sm text-gray-900 dark:text-gray-100">
                                   {serv.nome}
                                 </span>
-                                <span className="shrink-0 text-xs font-semibold text-gray-500">
+                                <span className="shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400">
                                   {fmtBRL(serv.preco)}
                                 </span>
                               </button>
@@ -1012,7 +1012,7 @@ export function OrcamentosManager() {
                   <button
                     type="button"
                     onClick={() => removeServico(s.id)}
-                    className="mt-1 rounded-lg p-2 text-red-600 transition hover:bg-red-50"
+                    className="mt-1 rounded-lg p-2 text-red-600 transition hover:bg-red-50 dark:hover:bg-red-950"
                     aria-label="Remover serviço"
                   >
                     <Trash2 className="size-4" />
@@ -1024,14 +1024,14 @@ export function OrcamentosManager() {
             <button
               type="button"
               onClick={addServico}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               <Plus className="size-4" />
               Adicionar serviço
             </button>
 
-            <div className="flex items-center justify-between border-t border-gray-200 pt-3">
-              <span className="text-sm font-semibold text-gray-900">Total</span>
+            <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 pt-3">
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Total</span>
               <span className="text-base font-bold" style={{ color: cor }}>
                 {fmtBRL(total)}
               </span>
@@ -1039,8 +1039,8 @@ export function OrcamentosManager() {
           </section>
 
           {/* Forma de pagamento */}
-          <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">
+          <section className="space-y-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Forma de Pagamento
             </h3>
 
@@ -1069,14 +1069,14 @@ export function OrcamentosManager() {
                     onClick={() => updateForm("opcao_pagamento", opt.v)}
                     className={`rounded-lg border p-3 text-left transition ${
                       ativo
-                        ? "border-gray-900 bg-gray-50 ring-1 ring-gray-900"
-                        : "border-gray-300 hover:border-gray-400"
+                        ? "border-gray-900 bg-gray-50 dark:bg-gray-800 ring-1 ring-gray-900"
+                        : "border-gray-300 dark:border-gray-700 hover:border-gray-400"
                     }`}
                   >
-                    <div className="text-sm font-semibold text-gray-900">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {opt.titulo}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{opt.desc}</div>
                   </button>
                 );
               })}
@@ -1084,7 +1084,7 @@ export function OrcamentosManager() {
 
             {/* Opção 2 — entrada + restante */}
             {form.opcao_pagamento === "entrada_restante" && (
-              <div className="space-y-3 rounded-lg bg-gray-50 p-3">
+              <div className="space-y-3 rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
                 <div>
                   <label htmlFor="pct_entrada" className={labelCls}>
                     Percentual de entrada (%)
@@ -1104,19 +1104,19 @@ export function OrcamentosManager() {
                 </div>
                 {plano.tipo === "entrada_restante" && (
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-white p-2 text-center">
-                      <div className="text-xs text-gray-500">
+                    <div className="rounded-lg bg-white dark:bg-gray-900 p-2 text-center">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
                         Entrada ({plano.pct}%)
                       </div>
-                      <div className="font-bold text-gray-900">
+                      <div className="font-bold text-gray-900 dark:text-gray-100">
                         {fmtBRL(plano.entrada)}
                       </div>
                     </div>
-                    <div className="rounded-lg bg-white p-2 text-center">
-                      <div className="text-xs text-gray-500">
+                    <div className="rounded-lg bg-white dark:bg-gray-900 p-2 text-center">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
                         Restante ({(100 - plano.pct).toFixed(0)}%)
                       </div>
-                      <div className="font-bold text-gray-900">
+                      <div className="font-bold text-gray-900 dark:text-gray-100">
                         {fmtBRL(plano.restante)}
                       </div>
                     </div>
@@ -1127,7 +1127,7 @@ export function OrcamentosManager() {
 
             {/* Opção 3 — parcelado */}
             {form.opcao_pagamento === "parcelado" && (
-              <div className="space-y-3 rounded-lg bg-gray-50 p-3">
+              <div className="space-y-3 rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label htmlFor="parcelas" className={labelCls}>
@@ -1212,18 +1212,18 @@ export function OrcamentosManager() {
                 )}
 
                 {plano.tipo === "parcelado" && (
-                  <div className="rounded-lg bg-white p-2">
+                  <div className="rounded-lg bg-white dark:bg-gray-900 p-2">
                     <table className="w-full text-sm">
                       <tbody>
                         {plano.parcelas.map((p) => (
                           <tr
                             key={p.numero}
-                            className="border-b border-gray-100 last:border-0"
+                            className="border-b border-gray-100 dark:border-gray-800 last:border-0"
                           >
-                            <td className="py-1.5 text-gray-600">
+                            <td className="py-1.5 text-gray-600 dark:text-gray-300">
                               {p.entrada ? "Entrada" : `Parcela ${p.numero}`}
                             </td>
-                            <td className="py-1.5 text-right font-semibold text-gray-900">
+                            <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-gray-100">
                               {fmtBRL(p.valor)}
                             </td>
                           </tr>
@@ -1237,8 +1237,8 @@ export function OrcamentosManager() {
           </section>
 
           {/* Nota */}
-          <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">Observações</h3>
+          <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Observações</h3>
             <div>
               <label htmlFor="nota" className={labelCls}>
                 Nota adicional
@@ -1254,8 +1254,8 @@ export function OrcamentosManager() {
           </section>
 
           {/* Modelo visual do PDF */}
-          <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">
+          <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Modelo do PDF
             </h3>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -1286,14 +1286,14 @@ export function OrcamentosManager() {
                     onClick={() => updateForm("template", opt.v)}
                     className={`rounded-lg border p-3 text-left transition ${
                       ativo
-                        ? "border-gray-900 bg-gray-50 ring-1 ring-gray-900"
-                        : "border-gray-300 hover:border-gray-400"
+                        ? "border-gray-900 bg-gray-50 dark:bg-gray-800 ring-1 ring-gray-900"
+                        : "border-gray-300 dark:border-gray-700 hover:border-gray-400"
                     }`}
                   >
-                    <div className="text-sm font-semibold text-gray-900">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {opt.titulo}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{opt.desc}</div>
                   </button>
                 );
               })}
@@ -1311,7 +1311,7 @@ export function OrcamentosManager() {
             <button
               type="button"
               onClick={() => setShowPreview((v) => !v)}
-              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 lg:hidden"
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 lg:hidden"
             >
               <Eye className="size-4" />
               {showPreview ? "Ocultar prévia" : "Ver prévia"}
@@ -1320,7 +1320,7 @@ export function OrcamentosManager() {
               type="button"
               onClick={salvarOrcamento}
               disabled={salvando || !form.cliente_nome || total === 0}
-              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60"
             >
               {salvo ? <Check className="size-4" /> : <Save className="size-4" />}
               {salvando ? "Salvando..." : salvo ? "Salvo" : "Salvar"}
@@ -1339,7 +1339,7 @@ export function OrcamentosManager() {
 
         {/* ── Prévia do PDF ── */}
         <div className={showPreview ? "block" : "hidden lg:block"}>
-          <p className="mb-2 text-xs text-gray-500">
+          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
             Prévia do documento — o PDF terá aparência idêntica.
           </p>
 

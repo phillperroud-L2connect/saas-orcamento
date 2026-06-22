@@ -46,7 +46,7 @@ const MESES_CURTOS = [
 ];
 
 const STATUS_STYLE: Record<OrcamentoRow["status"], { label: string; cls: string }> = {
-  rascunho: { label: "Rascunho", cls: "bg-gray-100 text-gray-600" },
+  rascunho: { label: "Rascunho", cls: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" },
   enviado: { label: "Enviado", cls: "bg-blue-50 text-blue-700" },
   aprovado: { label: "Aprovado", cls: "bg-green-50 text-green-700" },
   recusado: { label: "Recusado", cls: "bg-red-50 text-red-700" },
@@ -139,7 +139,7 @@ export default async function FinanceiroPage() {
           : `${variacao >= 0 ? "▲" : "▼"} ${Math.abs(variacao).toFixed(0)}% vs mês anterior`,
       subCls:
         variacao === null
-          ? "text-gray-400"
+          ? "text-gray-400 dark:text-gray-500"
           : variacao >= 0
           ? "text-green-600"
           : "text-red-600",
@@ -149,39 +149,39 @@ export default async function FinanceiroPage() {
       titulo: "Mês anterior",
       valor: fmtBRL(faturadoMesAnterior),
       sub: "Faturamento aprovado",
-      subCls: "text-gray-400",
+      subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
     },
     {
       titulo: "Ticket médio",
       valor: fmtBRL(ticketMedio),
       sub: `${aprovadosArr.length} ${aprovadosArr.length === 1 ? "orçamento aprovado" : "orçamentos aprovados"}`,
-      subCls: "text-gray-400",
+      subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
     },
     {
       titulo: "Aprovados vs recusados",
       valor: `${aprovadosArr.length} / ${recusadosArr.length}`,
       sub: "Aprovados / recusados (total)",
-      subCls: "text-gray-400",
+      subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
     },
   ];
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="mx-auto max-w-6xl px-4 py-8">
         {/* Cabeçalho */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Financeiro</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Financeiro</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Visão geral do seu faturamento e dos últimos orçamentos.
             </p>
           </div>
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             <ArrowLeft className="size-4" />
             Voltar
@@ -196,19 +196,19 @@ export default async function FinanceiroPage() {
               className={`rounded-xl border p-4 shadow-sm ${
                 c.destaque
                   ? "border-gray-900 bg-gray-900 text-white"
-                  : "border-gray-200 bg-white"
+                  : "border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
               }`}
             >
               <div
                 className={`text-xs font-medium uppercase tracking-wide ${
-                  c.destaque ? "text-gray-300" : "text-gray-500"
+                  c.destaque ? "text-gray-300" : "text-gray-500 dark:text-gray-400"
                 }`}
               >
                 {c.titulo}
               </div>
               <div
                 className={`mt-2 text-2xl font-bold ${
-                  c.destaque ? "text-white" : "text-gray-900"
+                  c.destaque ? "text-white" : "text-gray-900 dark:text-gray-100"
                 }`}
               >
                 {c.valor}
@@ -221,33 +221,33 @@ export default async function FinanceiroPage() {
         </div>
 
         {/* Gráfico */}
-        <section className="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <section className="mt-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
           <div className="mb-4 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Faturamento — últimos 6 meses
             </h2>
-            <span className="text-xs text-gray-400">Orçamentos aprovados</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">Orçamentos aprovados</span>
           </div>
           <FaturamentoChart dados={serie} />
         </section>
 
         {/* Últimos orçamentos */}
-        <section className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-4">
-            <h2 className="text-sm font-semibold text-gray-900">
+        <section className="mt-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+          <div className="border-b border-gray-100 dark:border-gray-800 px-5 py-4">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Últimos orçamentos
             </h2>
           </div>
 
           {ultimos.length === 0 ? (
-            <div className="px-5 py-12 text-center text-sm text-gray-400">
+            <div className="px-5 py-12 text-center text-sm text-gray-400 dark:text-gray-500">
               Nenhum orçamento encontrado ainda.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-gray-400">
+                  <tr className="text-left text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">
                     <th className="px-5 py-3 font-medium">Nº</th>
                     <th className="px-5 py-3 font-medium">Cliente</th>
                     <th className="px-5 py-3 font-medium">Status</th>
@@ -267,10 +267,10 @@ export default async function FinanceiroPage() {
                         key={o.id}
                         className="border-t border-gray-50 transition hover:bg-gray-50/60"
                       >
-                        <td className="px-5 py-3 font-mono text-xs text-gray-500">
+                        <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
                           {o.numero ?? "—"}
                         </td>
-                        <td className="px-5 py-3 font-medium text-gray-900">
+                        <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">
                           {cliente}
                         </td>
                         <td className="px-5 py-3">
@@ -280,10 +280,10 @@ export default async function FinanceiroPage() {
                             {st.label}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-gray-500">
+                        <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
                           {fmtDataBR(o.created_at)}
                         </td>
-                        <td className="px-5 py-3 text-right font-semibold text-gray-900">
+                        <td className="px-5 py-3 text-right font-semibold text-gray-900 dark:text-gray-100">
                           {fmtBRL(num(o.total))}
                         </td>
                       </tr>

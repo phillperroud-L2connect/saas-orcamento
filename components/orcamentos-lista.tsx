@@ -44,11 +44,11 @@ const STATUS_LABEL: Record<OrcamentoStatus, string> = {
 };
 
 const STATUS_CLASSE: Record<OrcamentoStatus, string> = {
-  rascunho: "bg-gray-100 text-gray-600",
+  rascunho: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
   enviado: "bg-blue-50 text-blue-700",
   aprovado: "bg-green-50 text-green-700",
   recusado: "bg-red-50 text-red-700",
-  arquivado: "bg-gray-100 text-gray-500",
+  arquivado: "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400",
 };
 
 function formatMoeda(valor: number, moeda: string) {
@@ -167,10 +167,10 @@ export function OrcamentosLista() {
     const rotulo = o.titulo || o.numero || "Orçamento";
     const ehArquivado = o.status === "arquivado";
     return (
-      <li className="flex items-center justify-between gap-4 px-4 py-3 transition hover:bg-gray-50">
+      <li className="flex items-center justify-between gap-4 px-4 py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-gray-900">
+            <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
               {rotulo}
             </span>
             <span
@@ -179,7 +179,7 @@ export function OrcamentosLista() {
               {STATUS_LABEL[o.status]}
             </span>
           </div>
-          <div className="mt-0.5 text-xs text-gray-500">
+          <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
             {o.numero ? `${o.numero} · ` : ""}
             {formatData(o.created_at)} · {formatMoeda(o.total, o.moeda)}
           </div>
@@ -193,7 +193,7 @@ export function OrcamentosLista() {
               disabled={ocupado}
               title="Desarquivar"
               aria-label="Desarquivar orçamento"
-              className="rounded-md p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+              className="rounded-md p-2 text-gray-400 dark:text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40"
             >
               <ArchiveRestore className="h-4 w-4" />
             </button>
@@ -204,7 +204,7 @@ export function OrcamentosLista() {
               disabled={ocupado}
               title="Arquivar"
               aria-label="Arquivar orçamento"
-              className="rounded-md p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+              className="rounded-md p-2 text-gray-400 dark:text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40"
             >
               <Archive className="h-4 w-4" />
             </button>
@@ -215,7 +215,7 @@ export function OrcamentosLista() {
             disabled={ocupado}
             title="Deletar permanentemente"
             aria-label="Deletar orçamento"
-            className="rounded-md p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+            className="rounded-md p-2 text-gray-400 dark:text-gray-500 transition hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -226,13 +226,13 @@ export function OrcamentosLista() {
 
   return (
     <section className="mx-auto max-w-6xl px-4 pb-12">
-      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <header className="flex items-center justify-between gap-4 border-b border-gray-100 px-4 py-3">
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+        <header className="flex items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800 px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Orçamentos salvos
             </h2>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               {ativos.length} ativo{ativos.length === 1 ? "" : "s"}
               {arquivados.length > 0
                 ? ` · ${arquivados.length} arquivado${arquivados.length === 1 ? "" : "s"}`
@@ -244,7 +244,7 @@ export function OrcamentosLista() {
             onClick={carregar}
             disabled={carregando}
             title="Atualizar lista"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${carregando ? "animate-spin" : ""}`}
@@ -260,15 +260,15 @@ export function OrcamentosLista() {
         )}
 
         {carregando ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-400">
+          <p className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
             Carregando…
           </p>
         ) : ativos.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-400">
+          <p className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
             Nenhum orçamento ativo.
           </p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {ativos.map((o) => (
               <Linha key={o.id} o={o} />
             ))}
@@ -276,22 +276,22 @@ export function OrcamentosLista() {
         )}
 
         {arquivados.length > 0 && (
-          <div className="border-t border-gray-100">
+          <div className="border-t border-gray-100 dark:border-gray-800">
             <button
               type="button"
               onClick={() => setMostrarArquivados((v) => !v)}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium text-gray-500 transition hover:bg-gray-50"
+              className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 transition hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               <span>
                 {mostrarArquivados ? "Ocultar" : "Mostrar"} arquivados (
                 {arquivados.length})
               </span>
-              <span className="text-gray-400">
+              <span className="text-gray-400 dark:text-gray-500">
                 {mostrarArquivados ? "−" : "+"}
               </span>
             </button>
             {mostrarArquivados && (
-              <ul className="divide-y divide-gray-100 bg-gray-50/50">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 bg-gray-50/50">
                 {arquivados.map((o) => (
                   <Linha key={o.id} o={o} />
                 ))}

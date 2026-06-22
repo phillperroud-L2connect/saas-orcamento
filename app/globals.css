@@ -7,11 +7,11 @@
   --foreground: #171717;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Tema escuro controlado pela classe .dark no <html> (toggle do dashboard),
+   e não mais pela preferência do sistema, para o botão ser a fonte da verdade. */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 body {

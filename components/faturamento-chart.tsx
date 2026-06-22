@@ -36,7 +36,7 @@ export function FaturamentoChart({ dados }: { dados: PontoFaturamento[] }) {
   return (
     <div className="h-72 w-full">
       {vazio ? (
-        <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-gray-200 text-sm text-gray-400">
+        <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-gray-200 dark:border-gray-800 text-sm text-gray-400 dark:text-gray-500">
           Sem faturamento aprovado nos últimos 6 meses.
         </div>
       ) : (

@@ -7,7 +7,7 @@ export const metadata = {
 
 export default function OrcamentosPage() {
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <OrcamentosManager />
       <OrcamentosLista />
     </main>

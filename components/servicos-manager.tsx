@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase";
 import type { Servico } from "@/lib/types";
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
-const labelCls = "block text-sm font-medium text-gray-700 mb-1";
+  "w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
+const labelCls = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
 
 /** Moeda fixa em BRL — mesma do gerador de orçamentos. */
 function fmtBRL(v: number) {
@@ -172,16 +172,16 @@ export function ServicosManager() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Meus Serviços</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Meus Serviços</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Cadastre os serviços que você oferece com um preço padrão. Eles ficam
           disponíveis para preenchimento rápido no gerador de orçamentos.
         </p>
       </div>
 
       {/* Formulário de novo serviço */}
-      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <h3 className="mb-3 text-sm font-semibold text-gray-900">
+      <section className="mb-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+        <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
           Adicionar serviço
         </h3>
         <div className="flex flex-wrap items-end gap-3">
@@ -236,23 +236,23 @@ export function ServicosManager() {
       </section>
 
       {/* Lista de serviços */}
-      <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-4 py-3">
-          <h3 className="text-sm font-semibold text-gray-900">
+      <section className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+        <div className="border-b border-gray-200 dark:border-gray-800 px-4 py-3">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             Catálogo {servicos.length > 0 && `(${servicos.length})`}
           </h3>
         </div>
 
         {carregando ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">
+          <p className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
             Carregando...
           </p>
         ) : servicos.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">
+          <p className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
             Nenhum serviço cadastrado ainda. Adicione o primeiro acima.
           </p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {servicos.map((s) => (
               <li
                 key={s.id}
@@ -293,7 +293,7 @@ export function ServicosManager() {
                     <button
                       type="button"
                       onClick={cancelarEdicao}
-                      className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
+                      className="rounded-lg p-2 text-gray-500 dark:text-gray-400 transition hover:bg-gray-100 dark:hover:bg-gray-800"
                       aria-label="Cancelar"
                     >
                       <X className="size-4" />
@@ -301,16 +301,16 @@ export function ServicosManager() {
                   </>
                 ) : (
                   <>
-                    <span className="flex-1 truncate text-sm font-medium text-gray-900">
+                    <span className="flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                       {s.nome}
                     </span>
-                    <span className="w-32 text-right text-sm font-semibold text-gray-900">
+                    <span className="w-32 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {fmtBRL(s.preco)}
                     </span>
                     <button
                       type="button"
                       onClick={() => iniciarEdicao(s)}
-                      className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
+                      className="rounded-lg p-2 text-gray-500 dark:text-gray-400 transition hover:bg-gray-100 dark:hover:bg-gray-800"
                       aria-label="Editar serviço"
                     >
                       <Pencil className="size-4" />
@@ -318,7 +318,7 @@ export function ServicosManager() {
                     <button
                       type="button"
                       onClick={() => deletarServico(s.id)}
-                      className="rounded-lg p-2 text-red-600 transition hover:bg-red-50"
+                      className="rounded-lg p-2 text-red-600 transition hover:bg-red-50 dark:hover:bg-red-950"
                       aria-label="Remover serviço"
                     >
                       <Trash2 className="size-4" />
