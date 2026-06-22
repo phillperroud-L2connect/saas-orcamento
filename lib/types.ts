@@ -38,3 +38,13 @@ export type OrcamentoItem = {
   descricao: string;
   valor: number;
 };
+
+/** Serviço do catálogo do tenant ("Meus Serviços") com preço padrão. */
+export type Servico = {
+  id: string;
+  tenant_id: string;
+  user_id: string | null;
+  nome: string;
+  preco: number;
+  created_at: string;
+};

@@ -9,9 +9,10 @@ import {
   Save,
   Check,
   BookmarkPlus,
+  ListPlus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
-import type { Cliente, Tenant, OrcamentoItem } from "@/lib/types";
+import type { Cliente, Tenant, OrcamentoItem, Servico } from "@/lib/types";
 
 type ServicoItem = {
   id: string;
@@ -228,6 +229,9 @@ export function OrcamentosManager() {
   const [userId, setUserId] = useState<string | null>(null);
   const [modelos, setModelos] = useState<ModeloOrcamento[]>([]);
   const [salvandoModelo, setSalvandoModelo] = useState(false);
+  const [catalogo, setCatalogo] = useState<Servico[]>([]);
+  // Id da linha de serviço cujo seletor de catálogo está aberto (ou null).
+  const [catalogoAbertoId, setCatalogoAbertoId] = useState<string | null>(null);
 
   const [showPreview, setShowPreview] = useState(false);
   const [gerando, setGerando] = useState(false);
@@ -281,6 +285,13 @@ export function OrcamentosManager() {
       .select("id, nome, itens, pagamento, observacoes")
       .order("nome");
     if (modelosRows) setModelos(modelosRows as ModeloOrcamento[]);
+
+    // Catálogo "Meus Serviços" do tenant (RLS já restringe ao tenant atual).
+    const { data: servicosRows } = await supabase
+      .from("servicos")
+      .select("*")
+      .order("nome");
+    if (servicosRows) setCatalogo(servicosRows as Servico[]);
   }, [supabase]);
 
   useEffect(() => {
@@ -381,6 +392,23 @@ export function OrcamentosManager() {
         s.id === id ? { ...s, [field]: value } : s,
       ),
     }));
+    setSalvo(false);
+  }
+
+  /**
+   * Preenche uma linha de serviço a partir de um item do catálogo "Meus
+   * Serviços": copia nome -> descrição e preço -> valor. Fecha o dropdown.
+   */
+  function aplicarServicoCatalogo(linhaId: string, servico: Servico) {
+    setForm((f) => ({
+      ...f,
+      servicos: f.servicos.map((s) =>
+        s.id === linhaId
+          ? { ...s, descricao: servico.nome, valor: String(servico.preco) }
+          : s,
+      ),
+    }));
+    setCatalogoAbertoId(null);
     setSalvo(false);
   }
 
@@ -900,6 +928,62 @@ export function OrcamentosManager() {
                     onChange={(e) => updateServico(s.id, "valor", e.target.value)}
                   />
                 </div>
+
+                {/* Seletor do catálogo "Meus Serviços" */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCatalogoAbertoId((atual) =>
+                        atual === s.id ? null : s.id,
+                      )
+                    }
+                    title="Escolher de Meus Serviços"
+                    aria-label="Escolher de Meus Serviços"
+                    className="mt-1 rounded-lg border border-gray-300 p-2 text-gray-600 transition hover:bg-gray-50"
+                  >
+                    <ListPlus className="size-4" />
+                  </button>
+
+                  {catalogoAbertoId === s.id && (
+                    <>
+                      {/* Backdrop transparente para fechar ao clicar fora. */}
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setCatalogoAbertoId(null)}
+                      />
+                      <ul className="absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                        {catalogo.length === 0 ? (
+                          <li className="px-3 py-3 text-center text-xs text-gray-500">
+                            Nenhum serviço cadastrado.
+                            <br />
+                            Cadastre em “Meus Serviços”.
+                          </li>
+                        ) : (
+                          catalogo.map((serv) => (
+                            <li key={serv.id}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  aplicarServicoCatalogo(s.id, serv)
+                                }
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-gray-50"
+                              >
+                                <span className="truncate text-sm text-gray-900">
+                                  {serv.nome}
+                                </span>
+                                <span className="shrink-0 text-xs font-semibold text-gray-500">
+                                  {fmtBRL(serv.preco)}
+                                </span>
+                              </button>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </>
+                  )}
+                </div>
+
                 {form.servicos.length > 1 && (
                   <button
                     type="button"
