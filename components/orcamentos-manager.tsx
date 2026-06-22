@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, FileDown, Eye, Save, Check } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  FileDown,
+  Eye,
+  Save,
+  Check,
+  BookmarkPlus,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type { Cliente, Tenant, OrcamentoItem } from "@/lib/types";
 
@@ -31,6 +39,26 @@ type FormState = {
   tipo_parcelamento: TipoParcelamento; // Opção 3
   entrada_tipo: TipoEntrada; // Opção 3 — entrada diferenciada
   entrada_valor: string; // Opção 3 — valor ou % da entrada diferenciada
+};
+
+/** Campos de pagamento reutilizáveis guardados em um modelo. */
+type PagamentoModelo = Pick<
+  FormState,
+  | "opcao_pagamento"
+  | "percentual_entrada"
+  | "parcelas"
+  | "tipo_parcelamento"
+  | "entrada_tipo"
+  | "entrada_valor"
+>;
+
+/** Modelo de orçamento reutilizável — sem dados do cliente. */
+type ModeloOrcamento = {
+  id: string;
+  nome: string;
+  itens: OrcamentoItem[];
+  pagamento: Partial<PagamentoModelo> | null;
+  observacoes: string | null;
 };
 
 const emptyForm: FormState = {
@@ -198,6 +226,8 @@ export function OrcamentosManager() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [modelos, setModelos] = useState<ModeloOrcamento[]>([]);
+  const [salvandoModelo, setSalvandoModelo] = useState(false);
 
   const [showPreview, setShowPreview] = useState(false);
   const [gerando, setGerando] = useState(false);
@@ -244,6 +274,13 @@ export function OrcamentosManager() {
       .select("*")
       .order("nome");
     if (clientesRows) setClientes(clientesRows as Cliente[]);
+
+    // Modelos de orçamento do tenant (RLS já restringe ao tenant atual).
+    const { data: modelosRows } = await supabase
+      .from("modelos_orcamento")
+      .select("id, nome, itens, pagamento, observacoes")
+      .order("nome");
+    if (modelosRows) setModelos(modelosRows as ModeloOrcamento[]);
   }, [supabase]);
 
   useEffect(() => {
@@ -352,6 +389,99 @@ export function OrcamentosManager() {
     0,
   );
   const plano = calcularPlano(total, form);
+
+  /**
+   * Salva os campos reutilizáveis do formulário (itens, pagamento e
+   * observações — SEM dados do cliente) como um modelo na tabela
+   * modelos_orcamento. Pede um nome via prompt e atualiza a lista local.
+   */
+  async function salvarComoModelo() {
+    if (!tenantId) {
+      setErro("Não foi possível identificar seu tenant. Refaça o login.");
+      return;
+    }
+    const itens: OrcamentoItem[] = form.servicos
+      .filter((s) => s.descricao || s.valor)
+      .map((s) => ({ descricao: s.descricao, valor: parseFloat(s.valor) || 0 }));
+    if (itens.length === 0) {
+      setErro("Adicione ao menos um serviço antes de salvar como modelo.");
+      return;
+    }
+
+    const nome = window.prompt("Nome do modelo:")?.trim();
+    if (!nome) return; // cancelado ou vazio
+
+    setSalvandoModelo(true);
+    setErro(null);
+
+    const pagamento: PagamentoModelo = {
+      opcao_pagamento: form.opcao_pagamento,
+      percentual_entrada: form.percentual_entrada,
+      parcelas: form.parcelas,
+      tipo_parcelamento: form.tipo_parcelamento,
+      entrada_tipo: form.entrada_tipo,
+      entrada_valor: form.entrada_valor,
+    };
+
+    const { data, error } = await supabase
+      .from("modelos_orcamento")
+      .insert({
+        tenant_id: tenantId,
+        user_id: userId,
+        nome,
+        itens,
+        pagamento,
+        observacoes: form.nota || null,
+      })
+      .select("id, nome, itens, pagamento, observacoes")
+      .single();
+
+    if (error) {
+      console.error("[salvarComoModelo] erro ao salvar modelo:", error);
+      setErro("Não foi possível salvar o modelo.");
+    } else if (data) {
+      // Insere na lista local mantendo a ordenação por nome.
+      const novo = data as ModeloOrcamento;
+      setModelos((atuais) =>
+        [...atuais, novo].sort((a, b) =>
+          a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }),
+        ),
+      );
+    }
+    setSalvandoModelo(false);
+  }
+
+  /**
+   * Aplica um modelo ao formulário: preenche itens, pagamento e observações,
+   * PRESERVANDO os dados do cliente já digitados (o modelo não os contém).
+   */
+  function carregarModelo(id: string) {
+    if (!id) return;
+    const m = modelos.find((x) => x.id === id);
+    if (!m) return;
+
+    const servicos: ServicoItem[] = (m.itens ?? []).map((it) => ({
+      id: crypto.randomUUID(),
+      descricao: it.descricao ?? "",
+      valor: it.valor != null ? String(it.valor) : "",
+    }));
+    const pg = m.pagamento ?? {};
+
+    setForm((f) => ({
+      ...f, // preserva cliente_* já preenchidos
+      servicos: servicos.length
+        ? servicos
+        : [{ id: crypto.randomUUID(), descricao: "", valor: "" }],
+      nota: m.observacoes ?? "",
+      opcao_pagamento: pg.opcao_pagamento ?? "unico",
+      percentual_entrada: pg.percentual_entrada ?? "50",
+      parcelas: pg.parcelas ?? "2",
+      tipo_parcelamento: pg.tipo_parcelamento ?? "iguais",
+      entrada_tipo: pg.entrada_tipo ?? "percentual",
+      entrada_valor: pg.entrada_valor ?? "30",
+    }));
+    setSalvo(false);
+  }
 
   // Cor de destaque do orçamento: cor primária do tenant ou fallback escuro.
   const cor = tenant?.cor_primaria || "#0F0F0F";
@@ -575,6 +705,43 @@ export function OrcamentosManager() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* ── Formulário ── */}
         <div className="space-y-5">
+          {/* Modelos de orçamento */}
+          <section className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="min-w-[180px] flex-1">
+              <label htmlFor="modelo" className={labelCls}>
+                Carregar modelo
+              </label>
+              <select
+                id="modelo"
+                className={inputCls}
+                value=""
+                onChange={(e) => carregarModelo(e.target.value)}
+                disabled={modelos.length === 0}
+              >
+                <option value="">
+                  {modelos.length === 0
+                    ? "— nenhum modelo salvo —"
+                    : "— selecione um modelo —"}
+                </option>
+                {modelos.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={salvarComoModelo}
+              disabled={salvandoModelo || total === 0}
+              title="Salvar os serviços, pagamento e observações atuais como modelo reutilizável"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+            >
+              <BookmarkPlus className="size-4" />
+              {salvandoModelo ? "Salvando..." : "Salvar como modelo"}
+            </button>
+          </section>
+
           {/* Cliente */}
           <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-gray-900">
