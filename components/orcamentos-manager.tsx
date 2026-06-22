@@ -20,6 +20,8 @@ type FormState = {
   cliente_nome: string;
   cliente_email: string;
   cliente_telefone: string;
+  cliente_documento: string;
+  cliente_endereco: string;
   servicos: ServicoItem[];
   nota: string;
   // ── Pagamento ──
@@ -36,6 +38,8 @@ const emptyForm: FormState = {
   cliente_nome: "",
   cliente_email: "",
   cliente_telefone: "",
+  cliente_documento: "",
+  cliente_endereco: "",
   servicos: [{ id: "1", descricao: "", valor: "" }],
   nota: "",
   opcao_pagamento: "unico",
@@ -203,6 +207,11 @@ export function OrcamentosManager() {
   const [numero, setNumero] = useState("");
   const [dataHoje, setDataHoje] = useState("");
 
+  // Autocomplete de clientes no campo Nome.
+  const [sugestoes, setSugestoes] = useState<Cliente[]>([]);
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+  const buscaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const carregarContexto = useCallback(async () => {
     const {
       data: { user },
@@ -251,7 +260,59 @@ export function OrcamentosManager() {
       cliente_nome: c?.nome ?? "",
       cliente_email: c?.email ?? "",
       cliente_telefone: c?.telefone ?? "",
+      cliente_documento: c?.documento ?? "",
+      cliente_endereco: c?.endereco ?? "",
     }));
+  }
+
+  /**
+   * Digitação no campo Nome com autocomplete.
+   * Ao atingir 3+ caracteres, busca clientes do tenant por nome (ilike),
+   * com debounce para não disparar a cada tecla. Editar o nome desvincula
+   * o cliente selecionado (cliente_id) — um novo cliente pode ser cadastrado
+   * ao salvar se ele não existir.
+   */
+  function onNomeChange(value: string) {
+    setForm((f) => ({ ...f, cliente_id: "", cliente_nome: value }));
+    setSalvo(false);
+
+    if (buscaTimerRef.current) clearTimeout(buscaTimerRef.current);
+
+    const termo = value.trim();
+    if (termo.length < 3 || !tenantId) {
+      setSugestoes([]);
+      setMostrarSugestoes(false);
+      return;
+    }
+
+    buscaTimerRef.current = setTimeout(async () => {
+      // RLS já restringe ao tenant; o eq explícito deixa a intenção clara.
+      const { data } = await supabase
+        .from("clientes")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .ilike("nome", `%${termo}%`)
+        .order("nome")
+        .limit(8);
+      setSugestoes((data as Cliente[]) ?? []);
+      setMostrarSugestoes(true);
+    }, 300);
+  }
+
+  /** Preenche todos os dados a partir de um cliente sugerido. */
+  function aplicarSugestao(c: Cliente) {
+    setForm((f) => ({
+      ...f,
+      cliente_id: c.id,
+      cliente_nome: c.nome,
+      cliente_email: c.email ?? "",
+      cliente_telefone: c.telefone ?? "",
+      cliente_documento: c.documento ?? "",
+      cliente_endereco: c.endereco ?? "",
+    }));
+    setSugestoes([]);
+    setMostrarSugestoes(false);
+    setSalvo(false);
   }
 
   function addServico() {
@@ -295,6 +356,123 @@ export function OrcamentosManager() {
   // Cor de destaque do orçamento: cor primária do tenant ou fallback escuro.
   const cor = tenant?.cor_primaria || "#0F0F0F";
   const corSuave = `${cor}14`; // ~8% de opacidade (hex alpha)
+
+  /**
+   * Salva ou atualiza o cliente do orçamento na tabela "clientes".
+   * Deduplica por tenant_id + e-mail (ou por nome, quando não há e-mail),
+   * evitando criar clientes repetidos a cada orçamento salvo — mesma
+   * semântica de um upsert por tenant_id + email.
+   *
+   * Falhas aqui são silenciosas de propósito: o orçamento já foi salvo com
+   * sucesso e o cadastro do cliente é um efeito secundário, não deve quebrar
+   * o fluxo principal nem sobrescrever o erro/sucesso do orçamento.
+   *
+   */
+  async function salvarOuAtualizarCliente() {
+    // [debug] Confirma se o tenant_id foi resolvido antes de qualquer write.
+    console.log("[salvarOuAtualizarCliente] tenantId:", tenantId, "userId:", userId);
+    if (!tenantId) {
+      console.warn(
+        "[salvarOuAtualizarCliente] tenant_id ausente — cliente NÃO será salvo. " +
+          "Verifique se carregarContexto() resolveu o tenant (login/users.tenant_id).",
+      );
+      return;
+    }
+
+    const nome = form.cliente_nome.trim();
+    if (!nome) {
+      console.warn("[salvarOuAtualizarCliente] nome vazio — nada a salvar.");
+      return; // sem nome não há cliente para cadastrar
+    }
+
+    const email = form.cliente_email.trim();
+    const telefone = form.cliente_telefone.trim();
+    const documento = form.cliente_documento.trim();
+    const endereco = form.cliente_endereco.trim();
+
+    const dados = {
+      nome,
+      email: email || null,
+      telefone: telefone || null,
+      documento: documento || null,
+      endereco: endereco || null,
+    };
+
+    try {
+      // Procura cliente existente do mesmo tenant para não duplicar.
+      // Chave preferencial: e-mail; sem e-mail, cai para o nome.
+      // (RLS já restringe ao tenant atual; o eq explícito deixa a intenção clara.)
+      const busca = supabase
+        .from("clientes")
+        .select("id")
+        .eq("tenant_id", tenantId);
+
+      const { data: existente, error: erroBusca } = await (email
+        ? busca.eq("email", email)
+        : busca.eq("nome", nome)
+      )
+        .limit(1)
+        .maybeSingle();
+
+      if (erroBusca) {
+        console.error(
+          "[salvarOuAtualizarCliente] erro ao BUSCAR cliente:",
+          erroBusca,
+        );
+      }
+      console.log("[salvarOuAtualizarCliente] cliente existente:", existente);
+
+      if (existente?.id) {
+        // Atualiza apenas os campos vindos do formulário, preservando
+        // documento/endereco já cadastrados.
+        const { error: erroUpdate } = await supabase
+          .from("clientes")
+          .update(dados)
+          .eq("id", existente.id);
+        if (erroUpdate) {
+          console.error(
+            "[salvarOuAtualizarCliente] erro no UPDATE:",
+            erroUpdate,
+            "| payload:",
+            dados,
+          );
+        } else {
+          console.log("[salvarOuAtualizarCliente] cliente atualizado:", existente.id);
+        }
+      } else {
+        const payload = { ...dados, tenant_id: tenantId, user_id: userId };
+        const { data: inserido, error: erroInsert } = await supabase
+          .from("clientes")
+          .insert(payload)
+          .select("*")
+          .single();
+        if (erroInsert) {
+          // console.error visível: erro completo + payload enviado, para
+          // diagnosticar RLS, NOT NULL, FK, etc. direto no DevTools.
+          console.error(
+            "[salvarOuAtualizarCliente] FALHA no INSERT em clientes:",
+            erroInsert,
+            "| payload:",
+            payload,
+          );
+        } else if (inserido) {
+          console.log("[salvarOuAtualizarCliente] cliente inserido:", inserido.id);
+          // Adiciona o novo cliente ao state local (mantendo a ordenação por
+          // nome do carregamento inicial) para que o autocomplete funcione
+          // imediatamente, sem precisar recarregar a página.
+          const novo = inserido as Cliente;
+          setClientes((atuais) =>
+            [...atuais, novo].sort((a, b) =>
+              a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Exceção inesperada (rede, parsing, etc.) — agora logada em vez de engolida.
+      console.error("[salvarOuAtualizarCliente] exceção inesperada:", e);
+    }
+  }
 
   async function salvarOrcamento(): Promise<string | null> {
     if (!tenantId) {
@@ -346,6 +524,10 @@ export function OrcamentosManager() {
       setErro(`Erro ao salvar: ${error.message}`);
       return null;
     }
+
+    // Orçamento salvo com sucesso: salva/atualiza o cliente (efeito secundário,
+    // não-bloqueante e silencioso em caso de falha).
+    await salvarOuAtualizarCliente();
 
     setSalvo(true);
     return (data?.id as string) ?? null;
@@ -416,7 +598,7 @@ export function OrcamentosManager() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div>
+              <div className="relative">
                 <label htmlFor="cli_nome" className={labelCls}>
                   Nome *
                 </label>
@@ -424,11 +606,45 @@ export function OrcamentosManager() {
                   id="cli_nome"
                   className={inputCls}
                   value={form.cliente_nome}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, cliente_nome: e.target.value }))
+                  onChange={(e) => onNomeChange(e.target.value)}
+                  onFocus={() => {
+                    if (sugestoes.length > 0) setMostrarSugestoes(true);
+                  }}
+                  onBlur={() =>
+                    // Atraso para permitir o clique numa sugestão antes de fechar.
+                    setTimeout(() => setMostrarSugestoes(false), 150)
                   }
                   placeholder="Nome do cliente"
+                  autoComplete="off"
                 />
+                {mostrarSugestoes && sugestoes.length > 0 && (
+                  <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                    {sugestoes.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          // onMouseDown dispara antes do onBlur do input.
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            aplicarSugestao(c);
+                          }}
+                          className="flex w-full flex-col items-start px-3 py-2 text-left transition hover:bg-gray-50"
+                        >
+                          <span className="text-sm font-medium text-gray-900">
+                            {c.nome}
+                          </span>
+                          {(c.email || c.telefone) && (
+                            <span className="text-xs text-gray-500">
+                              {[c.email, c.telefone]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <div>
                 <label htmlFor="cli_email" className={labelCls}>
@@ -445,7 +661,7 @@ export function OrcamentosManager() {
                   placeholder="email@exemplo.com"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label htmlFor="cli_tel" className={labelCls}>
                   Telefone
                 </label>
@@ -457,6 +673,34 @@ export function OrcamentosManager() {
                     setForm((f) => ({ ...f, cliente_telefone: e.target.value }))
                   }
                   placeholder="+55 11 99999-9999"
+                />
+              </div>
+              <div>
+                <label htmlFor="cli_doc" className={labelCls}>
+                  Documento
+                </label>
+                <input
+                  id="cli_doc"
+                  className={inputCls}
+                  value={form.cliente_documento}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cliente_documento: e.target.value }))
+                  }
+                  placeholder="CPF / CNPJ"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="cli_end" className={labelCls}>
+                  Endereço
+                </label>
+                <input
+                  id="cli_end"
+                  className={inputCls}
+                  value={form.cliente_endereco}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cliente_endereco: e.target.value }))
+                  }
+                  placeholder="Rua, número, cidade..."
                 />
               </div>
             </div>

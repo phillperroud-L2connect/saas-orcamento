@@ -9,6 +9,7 @@ export type Cliente = {
   nome: string;
   email: string | null;
   telefone: string | null;
+  documento: string | null;
   endereco: string | null;
   created_at: string;
 };
