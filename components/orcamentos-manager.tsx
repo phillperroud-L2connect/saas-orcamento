@@ -13,6 +13,12 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type { Cliente, Tenant, OrcamentoItem, Servico } from "@/lib/types";
+import {
+  TemplateClassico,
+  TemplateModerno,
+  TemplateSimples,
+  type TipoTemplate,
+} from "./orcamento-templates";
 
 type ServicoItem = {
   id: string;
@@ -24,7 +30,7 @@ type OpcaoPagamento = "unico" | "entrada_restante" | "parcelado";
 type TipoParcelamento = "iguais" | "entrada_diferenciada";
 type TipoEntrada = "percentual" | "valor";
 
-type FormState = {
+export type FormState = {
   cliente_id: string;
   cliente_nome: string;
   cliente_email: string;
@@ -40,6 +46,8 @@ type FormState = {
   tipo_parcelamento: TipoParcelamento; // Opção 3
   entrada_tipo: TipoEntrada; // Opção 3 — entrada diferenciada
   entrada_valor: string; // Opção 3 — valor ou % da entrada diferenciada
+  // ── Apresentação ──
+  template: TipoTemplate; // modelo visual do PDF
 };
 
 /** Campos de pagamento reutilizáveis guardados em um modelo. */
@@ -77,10 +85,11 @@ const emptyForm: FormState = {
   tipo_parcelamento: "iguais",
   entrada_tipo: "percentual",
   entrada_valor: "30",
+  template: "classico",
 };
 
 /** Plano de pagamento calculado a partir do total e das escolhas do formulário. */
-type PlanoPagamento =
+export type PlanoPagamento =
   | { tipo: "unico"; resumo: string }
   | {
       tipo: "entrada_restante";
@@ -663,6 +672,7 @@ export function OrcamentosManager() {
         total,
         moeda: "BRL",
         status: "rascunho",
+        template: form.template,
         opcao_pagamento: form.opcao_pagamento,
         parcelas: plano.tipo === "parcelado" ? plano.n : 1,
         percentual_entrada:
@@ -720,6 +730,20 @@ export function OrcamentosManager() {
     await salvarOrcamento();
     await gerarPDF();
   }
+
+  // Props compartilhadas pelos três templates de PDF (prévia e geração).
+  const templateProps = {
+    form,
+    total,
+    plano,
+    tenant,
+    cor,
+    corSuave,
+    numero,
+    dataHoje,
+    t,
+    fmtBRL,
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -1229,6 +1253,53 @@ export function OrcamentosManager() {
             </div>
           </section>
 
+          {/* Modelo visual do PDF */}
+          <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900">
+              Modelo do PDF
+            </h3>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(
+                [
+                  {
+                    v: "classico",
+                    titulo: "Clássico",
+                    desc: "Formal, preto e branco",
+                  },
+                  {
+                    v: "moderno",
+                    titulo: "Moderno",
+                    desc: "Cores da sua marca",
+                  },
+                  {
+                    v: "simples",
+                    titulo: "Simples",
+                    desc: "Compacto e direto",
+                  },
+                ] as const
+              ).map((opt) => {
+                const ativo = form.template === opt.v;
+                return (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => updateForm("template", opt.v)}
+                    className={`rounded-lg border p-3 text-left transition ${
+                      ativo
+                        ? "border-gray-900 bg-gray-50 ring-1 ring-gray-900"
+                        : "border-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-gray-900">
+                      {opt.titulo}
+                    </div>
+                    <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           {erro && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               {erro}
@@ -1278,388 +1349,16 @@ export function OrcamentosManager() {
               background: "#ffffff",
               color: "#111111",
               fontFamily: "Helvetica Neue, Arial, sans-serif",
-              padding: "40px",
               minHeight: "297mm",
-              fontSize: "13px",
-              lineHeight: "1.5",
             }}
           >
-            {/* Header */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                marginBottom: "32px",
-                paddingBottom: "24px",
-                borderBottom: `2px solid ${cor}`,
-              }}
-            >
-              <div>
-                {tenant?.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={tenant.logo_url}
-                    alt={tenant.nome_empresa}
-                    style={{ height: "56px", width: "auto", display: "block" }}
-                    crossOrigin="anonymous"
-                  />
-                ) : (
-                  <div
-                    style={{
-                      fontSize: "22px",
-                      fontWeight: 800,
-                      color: cor,
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    {tenant?.nome_empresa || "Sua Empresa"}
-                  </div>
-                )}
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 700,
-                    color: "#111",
-                    textTransform: "uppercase",
-                    letterSpacing: "1px",
-                  }}
-                >
-                  {t.titulo}
-                </div>
-                <div style={{ color: "#666", fontSize: "12px", marginTop: "4px" }}>
-                  {t.numero} {numero}
-                </div>
-                <div style={{ color: "#666", fontSize: "12px" }}>
-                  {t.data}: {dataHoje}
-                </div>
-                <div style={{ color: "#666", fontSize: "12px" }}>
-                  {t.validade}: {t.validade_val}
-                </div>
-              </div>
-            </div>
-
-            {/* Cliente */}
-            <div
-              style={{
-                marginBottom: "28px",
-                background: corSuave,
-                borderRadius: "8px",
-                padding: "16px",
-                borderLeft: `4px solid ${cor}`,
-              }}
-            >
-              <div style={{ fontWeight: 700, color: cor, marginBottom: "8px" }}>
-                {t.cliente}
-              </div>
-              <div style={{ fontWeight: 600 }}>
-                {form.cliente_nome || "Nome do Cliente"}
-              </div>
-              {form.cliente_email && (
-                <div style={{ color: "#555" }}>{form.cliente_email}</div>
-              )}
-              {form.cliente_telefone && (
-                <div style={{ color: "#555" }}>{form.cliente_telefone}</div>
-              )}
-            </div>
-
-            {/* Serviços */}
-            <div style={{ marginBottom: "28px" }}>
-              <div
-                style={{
-                  fontWeight: 700,
-                  color: cor,
-                  marginBottom: "12px",
-                  textTransform: "uppercase",
-                  fontSize: "11px",
-                  letterSpacing: "1px",
-                }}
-              >
-                {t.servicos}
-              </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: cor, color: "#fff" }}>
-                    <th
-                      style={{
-                        padding: "10px 12px",
-                        textAlign: "left",
-                        fontWeight: 600,
-                        fontSize: "12px",
-                      }}
-                    >
-                      {t.servico}
-                    </th>
-                    <th
-                      style={{
-                        padding: "10px 12px",
-                        textAlign: "right",
-                        fontWeight: 600,
-                        fontSize: "12px",
-                        width: "140px",
-                      }}
-                    >
-                      {t.valor}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.servicos
-                    .filter((s) => s.descricao || s.valor)
-                    .map((s, i) => (
-                      <tr
-                        key={s.id}
-                        style={{ background: i % 2 === 0 ? "#fff" : corSuave }}
-                      >
-                        <td
-                          style={{
-                            padding: "10px 12px",
-                            borderBottom: "1px solid #eee",
-                          }}
-                        >
-                          {s.descricao || `Serviço ${i + 1}`}
-                        </td>
-                        <td
-                          style={{
-                            padding: "10px 12px",
-                            textAlign: "right",
-                            borderBottom: "1px solid #eee",
-                          }}
-                        >
-                          {fmtBRL(parseFloat(s.valor) || 0)}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: corSuave }}>
-                    <td
-                      style={{ padding: "12px", fontWeight: 700, fontSize: "14px" }}
-                    >
-                      {t.total}
-                    </td>
-                    <td
-                      style={{
-                        padding: "12px",
-                        textAlign: "right",
-                        fontWeight: 800,
-                        fontSize: "16px",
-                        color: cor,
-                      }}
-                    >
-                      {fmtBRL(total)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            {/* Condições de pagamento */}
-            <div
-              style={{
-                marginBottom: "24px",
-                border: "1px solid #e5e7eb",
-                borderRadius: "8px",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  background: corSuave,
-                  padding: "10px 16px",
-                  fontWeight: 700,
-                  color: cor,
-                  fontSize: "12px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                }}
-              >
-                {t.pagamento}
-              </div>
-              <div style={{ padding: "16px" }}>
-                {/* Opção 1 — pagamento único */}
-                {plano.tipo === "unico" && (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span style={{ fontSize: "13px", color: "#555" }}>
-                      Pagamento à vista
-                    </span>
-                    <span
-                      style={{ fontSize: "22px", fontWeight: 800, color: cor }}
-                    >
-                      {fmtBRL(total)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Opção 2 — entrada + restante */}
-                {plano.tipo === "entrada_restante" && (
-                  <>
-                    <div style={{ display: "flex", gap: "16px" }}>
-                      <div
-                        style={{
-                          flex: 1,
-                          textAlign: "center",
-                          background: "#fff",
-                          border: "1px solid #e5e7eb",
-                          borderRadius: "8px",
-                          padding: "16px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            color: "#666",
-                            marginBottom: "4px",
-                          }}
-                        >
-                          Entrada ({plano.pct}%)
-                        </div>
-                        <div
-                          style={{ fontSize: "20px", fontWeight: 800, color: cor }}
-                        >
-                          {fmtBRL(plano.entrada)}
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          flex: 1,
-                          textAlign: "center",
-                          background: "#fff",
-                          border: "1px solid #e5e7eb",
-                          borderRadius: "8px",
-                          padding: "16px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            color: "#666",
-                            marginBottom: "4px",
-                          }}
-                        >
-                          Restante ({(100 - plano.pct).toFixed(0)}%)
-                        </div>
-                        <div
-                          style={{ fontSize: "20px", fontWeight: 800, color: cor }}
-                        >
-                          {fmtBRL(plano.restante)}
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        marginTop: "12px",
-                        fontSize: "11px",
-                        color: "#888",
-                        textAlign: "center",
-                      }}
-                    >
-                      * São 2 pagamentos separados: entrada e restante na entrega.
-                    </div>
-                  </>
-                )}
-
-                {/* Opção 3 — parcelado */}
-                {plano.tipo === "parcelado" && (
-                  <>
-                    <div
-                      style={{
-                        marginBottom: "10px",
-                        fontSize: "12px",
-                        color: "#555",
-                      }}
-                    >
-                      {plano.subtipo === "entrada_diferenciada"
-                        ? `Parcelado em ${plano.n}x com entrada diferenciada`
-                        : `Parcelado em ${plano.n}x iguais`}
-                    </div>
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <tbody>
-                        {plano.parcelas.map((p) => (
-                          <tr key={p.numero}>
-                            <td
-                              style={{
-                                padding: "8px 12px",
-                                borderBottom: "1px solid #eee",
-                                fontSize: "12px",
-                                color: "#444",
-                              }}
-                            >
-                              {p.entrada
-                                ? "Entrada (1ª parcela)"
-                                : `Parcela ${p.numero}`}
-                            </td>
-                            <td
-                              style={{
-                                padding: "8px 12px",
-                                borderBottom: "1px solid #eee",
-                                textAlign: "right",
-                                fontWeight: 700,
-                                color: cor,
-                                fontSize: "13px",
-                              }}
-                            >
-                              {fmtBRL(p.valor)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Nota adicional */}
-            {form.nota && (
-              <div
-                style={{
-                  marginBottom: "24px",
-                  padding: "12px 16px",
-                  background: "#fffbf0",
-                  border: "1px solid #ffe080",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                  color: "#555",
-                }}
-              >
-                {form.nota}
-              </div>
+            {form.template === "moderno" ? (
+              <TemplateModerno {...templateProps} />
+            ) : form.template === "simples" ? (
+              <TemplateSimples {...templateProps} />
+            ) : (
+              <TemplateClassico {...templateProps} />
             )}
-
-            {/* Rodapé */}
-            <div
-              style={{
-                marginTop: "40px",
-                textAlign: "center",
-                borderTop: "1px solid #eee",
-                paddingTop: "16px",
-              }}
-            >
-              <div style={{ color: "#888", fontSize: "12px" }}>{t.rodape}</div>
-              {tenant && (
-                <div
-                  style={{
-                    marginTop: "6px",
-                    color: "#aaa",
-                    fontSize: "10px",
-                    letterSpacing: "0.3px",
-                  }}
-                >
-                  {[tenant.nome_empresa, tenant.email, tenant.telefone]
-                    .filter(Boolean)
-                    .join(" | ")}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
