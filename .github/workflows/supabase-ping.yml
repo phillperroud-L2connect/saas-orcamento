@@ -1,0 +1,48 @@
+name: Supabase Keep-Alive Ping
+
+# Mantém o banco do Supabase ativo no plano gratuito.
+# O Supabase pausa projetos free após ~7 dias de inatividade,
+# então fazemos uma query leve a cada 3 dias.
+
+on:
+  schedule:
+    # A cada 3 dias, às 06:00 UTC
+    - cron: '0 6 */3 * *'
+  # Permite disparo manual pela aba Actions
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping tabela tenants (Supabase REST)
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Secrets NEXT_PUBLIC_SUPABASE_URL e/ou NEXT_PUBLIC_SUPABASE_ANON_KEY não configurados."
+            exit 1
+          fi
+
+          # Query simples e leve: pede apenas a contagem (HEAD), sem trazer linhas.
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${SUPABASE_URL}/rest/v1/tenants?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Prefer: count=exact" \
+            -H "Range: 0-0")
+
+          echo "HTTP status: $STATUS"
+
+          # 200 (ok) e 206 (partial content) indicam que o banco respondeu.
+          # 401/403 (RLS bloqueando o anon) também comprovam que o projeto está ATIVO.
+          case "$STATUS" in
+            200|206|401|403)
+              echo "✅ Supabase respondeu (HTTP $STATUS) — banco ativo."
+              ;;
+            *)
+              echo "::error::Supabase não respondeu como esperado (HTTP $STATUS)."
+              exit 1
+              ;;
+          esac
