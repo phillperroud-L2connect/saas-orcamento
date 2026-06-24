@@ -2,15 +2,17 @@
  * Templates visuais do PDF de orçamento.
  *
  * Cada template é um componente puro que recebe os mesmos dados (form, total,
- * plano de pagamento, tenant, cores e rótulos) e renderiza um layout diferente.
- * A prévia em tela e o PDF (gerado via html2canvas sobre o mesmo nó) usam
- * exatamente este markup — por isso tudo é estilizado inline.
+ * plano de pagamento, tenant, cores, rótulos do idioma e formatador de moeda)
+ * e renderiza um layout diferente. A prévia em tela e o PDF (gerado via
+ * html2canvas sobre o mesmo nó) usam exatamente este markup — por isso tudo é
+ * estilizado inline.
  *
  *   classico -> formal, preto e branco, tipografia limpa (layout original)
  *   moderno  -> cores da marca do tenant, cabeçalho colorido, sofisticado
  *   simples  -> ultra compacto, sem tabelas, direto ao ponto
  */
 import type { Tenant } from "@/lib/types";
+import type { Dict } from "@/lib/i18n";
 // Import apenas de tipos (apagado em runtime) — não cria ciclo de import.
 import type { FormState, PlanoPagamento } from "./orcamentos-manager";
 
@@ -25,8 +27,8 @@ export type TemplateProps = {
   corSuave: string;
   numero: string;
   dataHoje: string;
-  t: Record<string, string>;
-  fmtBRL: (v: number) => string;
+  dict: Dict;
+  fmt: (v: number) => string;
 };
 
 /* ===========================================================================
@@ -41,8 +43,8 @@ export function TemplateClassico({
   corSuave,
   numero,
   dataHoje,
-  t,
-  fmtBRL,
+  dict,
+  fmt,
 }: TemplateProps) {
   return (
     <div style={{ padding: "40px", fontSize: "13px", lineHeight: 1.5 }}>
@@ -89,16 +91,16 @@ export function TemplateClassico({
               letterSpacing: "1px",
             }}
           >
-            {t.titulo}
+            {dict.pdf.titulo}
           </div>
           <div style={{ color: "#666", fontSize: "12px", marginTop: "4px" }}>
-            {t.numero} {numero}
+            {dict.pdf.numero} {numero}
           </div>
           <div style={{ color: "#666", fontSize: "12px" }}>
-            {t.data}: {dataHoje}
+            {dict.pdf.data}: {dataHoje}
           </div>
           <div style={{ color: "#666", fontSize: "12px" }}>
-            {t.validade}: {t.validade_val}
+            {dict.pdf.validade}: {dict.pdf.validadeVal}
           </div>
         </div>
       </div>
@@ -114,10 +116,10 @@ export function TemplateClassico({
         }}
       >
         <div style={{ fontWeight: 700, color: cor, marginBottom: "8px" }}>
-          {t.cliente}
+          {dict.pdf.cliente}
         </div>
         <div style={{ fontWeight: 600 }}>
-          {form.cliente_nome || "Nome do Cliente"}
+          {form.cliente_nome || dict.pdf.nomeCliente}
         </div>
         {form.cliente_email && (
           <div style={{ color: "#555" }}>{form.cliente_email}</div>
@@ -139,7 +141,7 @@ export function TemplateClassico({
             letterSpacing: "1px",
           }}
         >
-          {t.servicos}
+          {dict.pdf.servicos}
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -152,7 +154,7 @@ export function TemplateClassico({
                   fontSize: "12px",
                 }}
               >
-                {t.servico}
+                {dict.pdf.servico}
               </th>
               <th
                 style={{
@@ -163,7 +165,7 @@ export function TemplateClassico({
                   width: "140px",
                 }}
               >
-                {t.valor}
+                {dict.pdf.valor}
               </th>
             </tr>
           </thead>
@@ -181,7 +183,7 @@ export function TemplateClassico({
                       borderBottom: "1px solid #eee",
                     }}
                   >
-                    {s.descricao || `Serviço ${i + 1}`}
+                    {s.descricao || dict.orc.servicoN(i + 1)}
                   </td>
                   <td
                     style={{
@@ -190,7 +192,7 @@ export function TemplateClassico({
                       borderBottom: "1px solid #eee",
                     }}
                   >
-                    {fmtBRL(parseFloat(s.valor) || 0)}
+                    {fmt(parseFloat(s.valor) || 0)}
                   </td>
                 </tr>
               ))}
@@ -198,7 +200,7 @@ export function TemplateClassico({
           <tfoot>
             <tr style={{ background: corSuave }}>
               <td style={{ padding: "12px", fontWeight: 700, fontSize: "14px" }}>
-                {t.total}
+                {dict.pdf.total}
               </td>
               <td
                 style={{
@@ -209,7 +211,7 @@ export function TemplateClassico({
                   color: cor,
                 }}
               >
-                {fmtBRL(total)}
+                {fmt(total)}
               </td>
             </tr>
           </tfoot>
@@ -236,7 +238,7 @@ export function TemplateClassico({
             letterSpacing: "0.5px",
           }}
         >
-          {t.pagamento}
+          {dict.pdf.pagamento}
         </div>
         <div style={{ padding: "16px" }}>
           {plano.tipo === "unico" && (
@@ -248,10 +250,10 @@ export function TemplateClassico({
               }}
             >
               <span style={{ fontSize: "13px", color: "#555" }}>
-                Pagamento à vista
+                {dict.pdf.pagamentoAVista}
               </span>
               <span style={{ fontSize: "22px", fontWeight: 800, color: cor }}>
-                {fmtBRL(total)}
+                {fmt(total)}
               </span>
             </div>
           )}
@@ -276,10 +278,10 @@ export function TemplateClassico({
                       marginBottom: "4px",
                     }}
                   >
-                    Entrada ({plano.pct}%)
+                    {dict.pdf.entradaPct(plano.pct)}
                   </div>
                   <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                    {fmtBRL(plano.entrada)}
+                    {fmt(plano.entrada)}
                   </div>
                 </div>
                 <div
@@ -299,10 +301,10 @@ export function TemplateClassico({
                       marginBottom: "4px",
                     }}
                   >
-                    Restante ({(100 - plano.pct).toFixed(0)}%)
+                    {dict.pdf.restantePct(Number((100 - plano.pct).toFixed(0)))}
                   </div>
                   <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                    {fmtBRL(plano.restante)}
+                    {fmt(plano.restante)}
                   </div>
                 </div>
               </div>
@@ -314,7 +316,7 @@ export function TemplateClassico({
                   textAlign: "center",
                 }}
               >
-                * São 2 pagamentos separados: entrada e restante na entrega.
+                {dict.pdf.doisPagamentosNota}
               </div>
             </>
           )}
@@ -329,8 +331,8 @@ export function TemplateClassico({
                 }}
               >
                 {plano.subtipo === "entrada_diferenciada"
-                  ? `Parcelado em ${plano.n}x com entrada diferenciada`
-                  : `Parcelado em ${plano.n}x iguais`}
+                  ? dict.pdf.parceladoEntradaDif(plano.n)
+                  : dict.pdf.parceladoIguais(plano.n)}
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <tbody>
@@ -344,7 +346,9 @@ export function TemplateClassico({
                           color: "#444",
                         }}
                       >
-                        {p.entrada ? "Entrada (1ª parcela)" : `Parcela ${p.numero}`}
+                        {p.entrada
+                          ? dict.pdf.entradaPrimeira
+                          : dict.pdf.parcelaN(p.numero)}
                       </td>
                       <td
                         style={{
@@ -356,7 +360,7 @@ export function TemplateClassico({
                           fontSize: "13px",
                         }}
                       >
-                        {fmtBRL(p.valor)}
+                        {fmt(p.valor)}
                       </td>
                     </tr>
                   ))}
@@ -393,7 +397,7 @@ export function TemplateClassico({
           paddingTop: "16px",
         }}
       >
-        <div style={{ color: "#888", fontSize: "12px" }}>{t.rodape}</div>
+        <div style={{ color: "#888", fontSize: "12px" }}>{dict.pdf.rodape}</div>
         {tenant && (
           <div
             style={{
@@ -425,8 +429,8 @@ export function TemplateModerno({
   corSuave,
   numero,
   dataHoje,
-  t,
-  fmtBRL,
+  dict,
+  fmt,
 }: TemplateProps) {
   return (
     <div style={{ fontSize: "13px", lineHeight: 1.5 }}>
@@ -482,16 +486,16 @@ export function TemplateModerno({
               letterSpacing: "2px",
             }}
           >
-            {t.titulo}
+            {dict.pdf.titulo}
           </div>
           <div style={{ fontSize: "12px", marginTop: "8px", opacity: 0.9 }}>
-            {t.numero} {numero}
+            {dict.pdf.numero} {numero}
           </div>
           <div style={{ fontSize: "12px", opacity: 0.9 }}>
-            {t.data}: {dataHoje}
+            {dict.pdf.data}: {dataHoje}
           </div>
           <div style={{ fontSize: "12px", opacity: 0.9 }}>
-            {t.validade}: {t.validade_val}
+            {dict.pdf.validade}: {dict.pdf.validadeVal}
           </div>
         </div>
       </div>
@@ -516,10 +520,10 @@ export function TemplateModerno({
               letterSpacing: "1px",
             }}
           >
-            {t.cliente}
+            {dict.pdf.cliente}
           </div>
           <div style={{ fontWeight: 700, fontSize: "16px" }}>
-            {form.cliente_nome || "Nome do Cliente"}
+            {form.cliente_nome || dict.pdf.nomeCliente}
           </div>
           {(form.cliente_email || form.cliente_telefone) && (
             <div style={{ color: "#555", marginTop: "4px" }}>
@@ -554,7 +558,7 @@ export function TemplateModerno({
                     letterSpacing: "0.5px",
                   }}
                 >
-                  {t.servico}
+                  {dict.pdf.servico}
                 </th>
                 <th
                   style={{
@@ -567,7 +571,7 @@ export function TemplateModerno({
                     letterSpacing: "0.5px",
                   }}
                 >
-                  {t.valor}
+                  {dict.pdf.valor}
                 </th>
               </tr>
             </thead>
@@ -580,7 +584,7 @@ export function TemplateModerno({
                     style={{ background: i % 2 === 0 ? "#fff" : corSuave }}
                   >
                     <td style={{ padding: "12px 16px" }}>
-                      {s.descricao || `Serviço ${i + 1}`}
+                      {s.descricao || dict.orc.servicoN(i + 1)}
                     </td>
                     <td
                       style={{
@@ -589,7 +593,7 @@ export function TemplateModerno({
                         fontWeight: 600,
                       }}
                     >
-                      {fmtBRL(parseFloat(s.valor) || 0)}
+                      {fmt(parseFloat(s.valor) || 0)}
                     </td>
                   </tr>
                 ))}
@@ -618,10 +622,10 @@ export function TemplateModerno({
               fontWeight: 600,
             }}
           >
-            {t.total}
+            {dict.pdf.total}
           </span>
           <span style={{ fontSize: "26px", fontWeight: 800 }}>
-            {fmtBRL(total)}
+            {fmt(total)}
           </span>
         </div>
 
@@ -637,12 +641,12 @@ export function TemplateModerno({
               marginBottom: "12px",
             }}
           >
-            {t.pagamento}
+            {dict.pdf.pagamento}
           </div>
 
           {plano.tipo === "unico" && (
             <div style={{ fontSize: "13px", color: "#555" }}>
-              Pagamento à vista — {fmtBRL(total)}.
+              {dict.pdf.pagamentoAVistaValor(fmt(total))}
             </div>
           )}
 
@@ -660,10 +664,10 @@ export function TemplateModerno({
                 <div
                   style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}
                 >
-                  Entrada ({plano.pct}%)
+                  {dict.pdf.entradaPct(plano.pct)}
                 </div>
                 <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                  {fmtBRL(plano.entrada)}
+                  {fmt(plano.entrada)}
                 </div>
               </div>
               <div
@@ -678,10 +682,10 @@ export function TemplateModerno({
                 <div
                   style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}
                 >
-                  Restante ({(100 - plano.pct).toFixed(0)}%)
+                  {dict.pdf.restantePct(Number((100 - plano.pct).toFixed(0)))}
                 </div>
                 <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                  {fmtBRL(plano.restante)}
+                  {fmt(plano.restante)}
                 </div>
               </div>
             </div>
@@ -693,8 +697,8 @@ export function TemplateModerno({
                 style={{ marginBottom: "10px", fontSize: "12px", color: "#555" }}
               >
                 {plano.subtipo === "entrada_diferenciada"
-                  ? `Parcelado em ${plano.n}x com entrada diferenciada`
-                  : `Parcelado em ${plano.n}x iguais`}
+                  ? dict.pdf.parceladoEntradaDif(plano.n)
+                  : dict.pdf.parceladoIguais(plano.n)}
               </div>
               <div
                 style={{
@@ -718,8 +722,8 @@ export function TemplateModerno({
                           }}
                         >
                           {p.entrada
-                            ? "Entrada (1ª parcela)"
-                            : `Parcela ${p.numero}`}
+                            ? dict.pdf.entradaPrimeira
+                            : dict.pdf.parcelaN(p.numero)}
                         </td>
                         <td
                           style={{
@@ -730,7 +734,7 @@ export function TemplateModerno({
                             fontSize: "13px",
                           }}
                         >
-                          {fmtBRL(p.valor)}
+                          {fmt(p.valor)}
                         </td>
                       </tr>
                     ))}
@@ -768,7 +772,7 @@ export function TemplateModerno({
           }}
         >
           <div style={{ color: cor, fontSize: "12px", fontWeight: 600 }}>
-            {t.rodape}
+            {dict.pdf.rodape}
           </div>
           {tenant && (
             <div
@@ -800,8 +804,8 @@ export function TemplateSimples({
   tenant,
   numero,
   dataHoje,
-  t,
-  fmtBRL,
+  dict,
+  fmt,
 }: TemplateProps) {
   return (
     <div
@@ -828,7 +832,7 @@ export function TemplateSimples({
         </div>
         <div style={{ fontSize: "12px", color: "#555", textAlign: "right" }}>
           <div>
-            <strong>{t.titulo}</strong> {numero}
+            <strong>{dict.pdf.titulo}</strong> {numero}
           </div>
           <div>{dataHoje}</div>
         </div>
@@ -836,7 +840,7 @@ export function TemplateSimples({
 
       {/* Cliente em uma linha */}
       <div style={{ marginBottom: "18px" }}>
-        <strong>{t.cliente}:</strong> {form.cliente_nome || "—"}
+        <strong>{dict.pdf.cliente}:</strong> {form.cliente_nome || "—"}
         {form.cliente_telefone ? `  ·  ${form.cliente_telefone}` : ""}
         {form.cliente_email ? `  ·  ${form.cliente_email}` : ""}
       </div>
@@ -856,7 +860,7 @@ export function TemplateSimples({
                 borderBottom: "1px dashed #ccc",
               }}
             >
-              <span>{s.descricao || `Serviço ${i + 1}`}</span>
+              <span>{s.descricao || dict.orc.servicoN(i + 1)}</span>
               <span
                 style={{
                   fontWeight: 600,
@@ -864,7 +868,7 @@ export function TemplateSimples({
                   marginLeft: "16px",
                 }}
               >
-                {fmtBRL(parseFloat(s.valor) || 0)}
+                {fmt(parseFloat(s.valor) || 0)}
               </span>
             </div>
           ))}
@@ -890,16 +894,16 @@ export function TemplateSimples({
             letterSpacing: "0.5px",
           }}
         >
-          {t.total}
+          {dict.pdf.total}
         </span>
         <span style={{ fontSize: "20px", fontWeight: 800 }}>
-          {fmtBRL(total)}
+          {fmt(total)}
         </span>
       </div>
 
       {/* Pagamento em uma linha (resumo do plano) */}
       <div style={{ fontSize: "12px", color: "#444", marginBottom: "10px" }}>
-        <strong>{t.pagamento}:</strong> {plano.resumo}
+        <strong>{dict.pdf.pagamento}:</strong> {plano.resumo}
       </div>
 
       {/* Nota */}

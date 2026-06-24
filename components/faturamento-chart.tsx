@@ -10,18 +10,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { fmtMoeda } from "@/lib/moeda";
+import type { MoedaPreferida } from "@/lib/types";
 
 export type PontoFaturamento = {
   mes: string; // rótulo curto, ex: "jan/26"
   total: number;
 };
-
-function fmtBRL(v: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(v);
-}
 
 /** Eixo Y compacto: 1.2k / 3.4M */
 function fmtCompacto(v: number) {
@@ -30,14 +25,24 @@ function fmtCompacto(v: number) {
   return String(v);
 }
 
-export function FaturamentoChart({ dados }: { dados: PontoFaturamento[] }) {
+export function FaturamentoChart({
+  dados,
+  moeda,
+  labelFaturado,
+  labelVazio,
+}: {
+  dados: PontoFaturamento[];
+  moeda: MoedaPreferida;
+  labelFaturado: string;
+  labelVazio: string;
+}) {
   const vazio = dados.every((d) => d.total === 0);
 
   return (
     <div className="h-72 w-full">
       {vazio ? (
         <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-gray-200 dark:border-gray-800 text-sm text-gray-400 dark:text-gray-500">
-          Sem faturamento aprovado nos últimos 6 meses.
+          {labelVazio}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height="100%">
@@ -58,7 +63,10 @@ export function FaturamentoChart({ dados }: { dados: PontoFaturamento[] }) {
             />
             <Tooltip
               cursor={{ fill: "#11111108" }}
-              formatter={(value) => [fmtBRL(Number(value) || 0), "Faturado"]}
+              formatter={(value) => [
+                fmtMoeda(Number(value) || 0, moeda),
+                labelFaturado,
+              ]}
               contentStyle={{
                 borderRadius: 8,
                 border: "1px solid #e5e7eb",

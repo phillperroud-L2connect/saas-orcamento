@@ -12,6 +12,8 @@ import {
   ListPlus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { useI18n } from "@/components/i18n-provider";
+import type { Dict } from "@/lib/i18n";
 import type { Cliente, Tenant, OrcamentoItem, Servico } from "@/lib/types";
 import {
   TemplateClassico,
@@ -107,42 +109,12 @@ export type PlanoPagamento =
       resumo: string;
     };
 
-/** Rótulos fixos em português — sem opção de troca de idioma. */
-const t = {
-  titulo: "Orçamento",
-  data: "Data",
-  numero: "Nº",
-  cliente: "Cliente",
-  email: "E-mail",
-  telefone: "Telefone",
-  servicos: "Serviços",
-  servico: "Serviço / Descrição",
-  valor: "Valor",
-  total: "Total",
-  pagamento: "Condições de Pagamento",
-  validade: "Validade",
-  validade_val: "30 dias",
-  rodape: "Obrigado pela preferência!",
-};
-
 function gerarNumero() {
   const now = new Date();
   const yy = String(now.getFullYear()).slice(2);
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const seq = String(Math.floor(Math.random() * 900) + 100);
   return `ORC-${yy}${mm}-${seq}`;
-}
-
-function formatDataBR(d: Date) {
-  return d.toLocaleDateString("pt-BR");
-}
-
-/** Moeda fixa em BRL. */
-function fmtBRL(v: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(v);
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -152,8 +124,14 @@ function clamp(n: number, min: number, max: number) {
 /**
  * Converte o total + escolhas de pagamento em um plano estruturado.
  * Usado tanto na prévia/PDF quanto na hora de salvar no banco.
+ * Os resumos saem localizados (dict) e formatados na moeda do tenant (fmt).
  */
-function calcularPlano(total: number, form: FormState): PlanoPagamento {
+function calcularPlano(
+  total: number,
+  form: FormState,
+  dict: Dict,
+  fmt: (v: number) => string,
+): PlanoPagamento {
   if (form.opcao_pagamento === "entrada_restante") {
     const pct = clamp(parseFloat(form.percentual_entrada) || 0, 0, 100);
     const entrada = (total * pct) / 100;
@@ -163,9 +141,7 @@ function calcularPlano(total: number, form: FormState): PlanoPagamento {
       pct,
       entrada,
       restante,
-      resumo: `Entrada de ${pct}% (${fmtBRL(entrada)}) + restante de ${fmtBRL(
-        restante,
-      )} — 2 pagamentos separados.`,
+      resumo: dict.resumo.entradaRestante(pct, fmt(entrada), fmt(restante)),
     };
   }
 
@@ -195,9 +171,7 @@ function calcularPlano(total: number, form: FormState): PlanoPagamento {
         subtipo: "entrada_diferenciada",
         pctEntrada,
         parcelas,
-        resumo: `Entrada de ${fmtBRL(entrada)} + ${nRest}x de ${fmtBRL(
-          valorRest,
-        )}.`,
+        resumo: dict.resumo.entradaDif(fmt(entrada), nRest, fmt(valorRest)),
       };
     }
 
@@ -213,13 +187,13 @@ function calcularPlano(total: number, form: FormState): PlanoPagamento {
       subtipo: "iguais",
       pctEntrada: 0,
       parcelas,
-      resumo: `${n}x de ${fmtBRL(valor)} (parcelas iguais).`,
+      resumo: dict.resumo.parcelado(n, fmt(valor)),
     };
   }
 
   return {
     tipo: "unico",
-    resumo: `Pagamento à vista — ${fmtBRL(total)}.`,
+    resumo: dict.resumo.unico(fmt(total)),
   };
 }
 
@@ -230,6 +204,7 @@ const labelCls = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-
 export function OrcamentosManager() {
   const supabase = createClient();
   const previewRef = useRef<HTMLDivElement>(null);
+  const { dict, fmt, simbolo, moeda, data: fmtDataLocal } = useI18n();
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -248,7 +223,9 @@ export function OrcamentosManager() {
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [numero, setNumero] = useState("");
-  const [dataHoje, setDataHoje] = useState("");
+  // Data fixada na montagem; o rótulo é formatado conforme o idioma do tenant.
+  const [hoje] = useState(() => new Date());
+  const dataHoje = fmtDataLocal(hoje);
 
   // Autocomplete de clientes no campo Nome.
   const [sugestoes, setSugestoes] = useState<Cliente[]>([]);
@@ -306,7 +283,6 @@ export function OrcamentosManager() {
   useEffect(() => {
     carregarContexto();
     setNumero(gerarNumero());
-    setDataHoje(formatDataBR(new Date()));
   }, [carregarContexto]);
 
   function selecionarCliente(id: string) {
@@ -425,7 +401,7 @@ export function OrcamentosManager() {
     (sum, s) => sum + (parseFloat(s.valor) || 0),
     0,
   );
-  const plano = calcularPlano(total, form);
+  const plano = calcularPlano(total, form, dict, fmt);
 
   /**
    * Salva os campos reutilizáveis do formulário (itens, pagamento e
@@ -434,18 +410,18 @@ export function OrcamentosManager() {
    */
   async function salvarComoModelo() {
     if (!tenantId) {
-      setErro("Não foi possível identificar seu tenant. Refaça o login.");
+      setErro(dict.orc.erroTenant);
       return;
     }
     const itens: OrcamentoItem[] = form.servicos
       .filter((s) => s.descricao || s.valor)
       .map((s) => ({ descricao: s.descricao, valor: parseFloat(s.valor) || 0 }));
     if (itens.length === 0) {
-      setErro("Adicione ao menos um serviço antes de salvar como modelo.");
+      setErro(dict.orc.erroServicoModelo);
       return;
     }
 
-    const nome = window.prompt("Nome do modelo:")?.trim();
+    const nome = window.prompt(dict.orc.nomeModeloPrompt)?.trim();
     if (!nome) return; // cancelado ou vazio
 
     setSalvandoModelo(true);
@@ -475,13 +451,13 @@ export function OrcamentosManager() {
 
     if (error) {
       console.error("[salvarComoModelo] erro ao salvar modelo:", error);
-      setErro("Não foi possível salvar o modelo.");
+      setErro(dict.orc.erroSalvarModelo);
     } else if (data) {
       // Insere na lista local mantendo a ordenação por nome.
       const novo = data as ModeloOrcamento;
       setModelos((atuais) =>
         [...atuais, novo].sort((a, b) =>
-          a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }),
+          a.nome.localeCompare(b.nome, undefined, { sensitivity: "base" }),
         ),
       );
     }
@@ -536,21 +512,10 @@ export function OrcamentosManager() {
    *
    */
   async function salvarOuAtualizarCliente() {
-    // [debug] Confirma se o tenant_id foi resolvido antes de qualquer write.
-    console.log("[salvarOuAtualizarCliente] tenantId:", tenantId, "userId:", userId);
-    if (!tenantId) {
-      console.warn(
-        "[salvarOuAtualizarCliente] tenant_id ausente — cliente NÃO será salvo. " +
-          "Verifique se carregarContexto() resolveu o tenant (login/users.tenant_id).",
-      );
-      return;
-    }
+    if (!tenantId) return;
 
     const nome = form.cliente_nome.trim();
-    if (!nome) {
-      console.warn("[salvarOuAtualizarCliente] nome vazio — nada a salvar.");
-      return; // sem nome não há cliente para cadastrar
-    }
+    if (!nome) return; // sem nome não há cliente para cadastrar
 
     const email = form.cliente_email.trim();
     const telefone = form.cliente_telefone.trim();
@@ -568,82 +533,49 @@ export function OrcamentosManager() {
     try {
       // Procura cliente existente do mesmo tenant para não duplicar.
       // Chave preferencial: e-mail; sem e-mail, cai para o nome.
-      // (RLS já restringe ao tenant atual; o eq explícito deixa a intenção clara.)
       const busca = supabase
         .from("clientes")
         .select("id")
         .eq("tenant_id", tenantId);
 
-      const { data: existente, error: erroBusca } = await (email
+      const { data: existente } = await (email
         ? busca.eq("email", email)
         : busca.eq("nome", nome)
       )
         .limit(1)
         .maybeSingle();
 
-      if (erroBusca) {
-        console.error(
-          "[salvarOuAtualizarCliente] erro ao BUSCAR cliente:",
-          erroBusca,
-        );
-      }
-      console.log("[salvarOuAtualizarCliente] cliente existente:", existente);
-
       if (existente?.id) {
         // Atualiza apenas os campos vindos do formulário, preservando
         // documento/endereco já cadastrados.
-        const { error: erroUpdate } = await supabase
-          .from("clientes")
-          .update(dados)
-          .eq("id", existente.id);
-        if (erroUpdate) {
-          console.error(
-            "[salvarOuAtualizarCliente] erro no UPDATE:",
-            erroUpdate,
-            "| payload:",
-            dados,
-          );
-        } else {
-          console.log("[salvarOuAtualizarCliente] cliente atualizado:", existente.id);
-        }
+        await supabase.from("clientes").update(dados).eq("id", existente.id);
       } else {
         const payload = { ...dados, tenant_id: tenantId, user_id: userId };
-        const { data: inserido, error: erroInsert } = await supabase
+        const { data: inserido } = await supabase
           .from("clientes")
           .insert(payload)
           .select("*")
           .single();
-        if (erroInsert) {
-          // console.error visível: erro completo + payload enviado, para
-          // diagnosticar RLS, NOT NULL, FK, etc. direto no DevTools.
-          console.error(
-            "[salvarOuAtualizarCliente] FALHA no INSERT em clientes:",
-            erroInsert,
-            "| payload:",
-            payload,
-          );
-        } else if (inserido) {
-          console.log("[salvarOuAtualizarCliente] cliente inserido:", inserido.id);
+        if (inserido) {
           // Adiciona o novo cliente ao state local (mantendo a ordenação por
           // nome do carregamento inicial) para que o autocomplete funcione
           // imediatamente, sem precisar recarregar a página.
           const novo = inserido as Cliente;
           setClientes((atuais) =>
             [...atuais, novo].sort((a, b) =>
-              a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }),
+              a.nome.localeCompare(b.nome, undefined, { sensitivity: "base" }),
             ),
           );
         }
       }
     } catch (e) {
-      // Exceção inesperada (rede, parsing, etc.) — agora logada em vez de engolida.
       console.error("[salvarOuAtualizarCliente] exceção inesperada:", e);
     }
   }
 
   async function salvarOrcamento(): Promise<string | null> {
     if (!tenantId) {
-      setErro("Não foi possível identificar seu tenant. Refaça o login.");
+      setErro(dict.orc.erroTenant);
       return null;
     }
     setSalvando(true);
@@ -664,13 +596,13 @@ export function OrcamentosManager() {
         cliente_id: form.cliente_id || null,
         numero,
         titulo: form.cliente_nome
-          ? `Orçamento — ${form.cliente_nome}`
-          : "Orçamento",
+          ? `${dict.pdf.titulo} — ${form.cliente_nome}`
+          : dict.pdf.titulo,
         itens,
         subtotal: total,
         desconto: 0,
         total,
-        moeda: "BRL",
+        moeda,
         status: "rascunho",
         template: form.template,
         opcao_pagamento: form.opcao_pagamento,
@@ -689,7 +621,7 @@ export function OrcamentosManager() {
     setSalvando(false);
 
     if (error) {
-      setErro(`Erro ao salvar: ${error.message}`);
+      setErro(dict.orc.erroSalvar(error.message));
       return null;
     }
 
@@ -741,16 +673,18 @@ export function OrcamentosManager() {
     corSuave,
     numero,
     dataHoje,
-    t,
-    fmtBRL,
+    dict,
+    fmt,
   };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Orçamentos</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+          {dict.orc.titulo}
+        </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Gere orçamentos profissionais em PDF e salve no histórico.
+          {dict.orc.subtitulo}
         </p>
       </div>
 
@@ -761,7 +695,7 @@ export function OrcamentosManager() {
           <section className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
             <div className="min-w-[180px] flex-1">
               <label htmlFor="modelo" className={labelCls}>
-                Carregar modelo
+                {dict.orc.carregarModelo}
               </label>
               <select
                 id="modelo"
@@ -772,8 +706,8 @@ export function OrcamentosManager() {
               >
                 <option value="">
                   {modelos.length === 0
-                    ? "— nenhum modelo salvo —"
-                    : "— selecione um modelo —"}
+                    ? dict.orc.nenhumModelo
+                    : dict.orc.selecioneModelo}
                 </option>
                 {modelos.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -786,28 +720,28 @@ export function OrcamentosManager() {
               type="button"
               onClick={salvarComoModelo}
               disabled={salvandoModelo || total === 0}
-              title="Salvar os serviços, pagamento e observações atuais como modelo reutilizável"
+              title={dict.orc.salvarModeloTitle}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60"
             >
               <BookmarkPlus className="size-4" />
-              {salvandoModelo ? "Salvando..." : "Salvar como modelo"}
+              {salvandoModelo ? dict.common.salvando : dict.orc.salvarModelo}
             </button>
           </section>
 
           {/* Cliente */}
           <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Dados do Cliente
+              {dict.orc.dadosCliente}
             </h3>
 
             <div>
-              <label className={labelCls}>Selecionar cliente cadastrado</label>
+              <label className={labelCls}>{dict.orc.selecionarCliente}</label>
               <select
                 className={inputCls}
                 value={form.cliente_id}
                 onChange={(e) => selecionarCliente(e.target.value)}
               >
-                <option value="">— ou preencha manualmente —</option>
+                <option value="">{dict.orc.ouManual}</option>
                 {clientes.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.nome}
@@ -819,7 +753,7 @@ export function OrcamentosManager() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="relative">
                 <label htmlFor="cli_nome" className={labelCls}>
-                  Nome *
+                  {dict.orc.nome} *
                 </label>
                 <input
                   id="cli_nome"
@@ -833,7 +767,7 @@ export function OrcamentosManager() {
                     // Atraso para permitir o clique numa sugestão antes de fechar.
                     setTimeout(() => setMostrarSugestoes(false), 150)
                   }
-                  placeholder="Nome do cliente"
+                  placeholder={dict.orc.nomePlaceholder}
                   autoComplete="off"
                 />
                 {mostrarSugestoes && sugestoes.length > 0 && (
@@ -867,7 +801,7 @@ export function OrcamentosManager() {
               </div>
               <div>
                 <label htmlFor="cli_email" className={labelCls}>
-                  E-mail
+                  {dict.orc.email}
                 </label>
                 <input
                   id="cli_email"
@@ -877,12 +811,12 @@ export function OrcamentosManager() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, cliente_email: e.target.value }))
                   }
-                  placeholder="email@exemplo.com"
+                  placeholder={dict.orc.emailPlaceholder}
                 />
               </div>
               <div>
                 <label htmlFor="cli_tel" className={labelCls}>
-                  Telefone
+                  {dict.orc.telefone}
                 </label>
                 <input
                   id="cli_tel"
@@ -891,12 +825,12 @@ export function OrcamentosManager() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, cliente_telefone: e.target.value }))
                   }
-                  placeholder="+55 11 99999-9999"
+                  placeholder={dict.orc.telefonePlaceholder}
                 />
               </div>
               <div>
                 <label htmlFor="cli_doc" className={labelCls}>
-                  Documento
+                  {dict.orc.documento}
                 </label>
                 <input
                   id="cli_doc"
@@ -905,12 +839,12 @@ export function OrcamentosManager() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, cliente_documento: e.target.value }))
                   }
-                  placeholder="CPF / CNPJ"
+                  placeholder={dict.orc.documentoPlaceholder}
                 />
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="cli_end" className={labelCls}>
-                  Endereço
+                  {dict.orc.endereco}
                 </label>
                 <input
                   id="cli_end"
@@ -919,7 +853,7 @@ export function OrcamentosManager() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, cliente_endereco: e.target.value }))
                   }
-                  placeholder="Rua, número, cidade..."
+                  placeholder={dict.orc.enderecoPlaceholder}
                 />
               </div>
             </div>
@@ -927,14 +861,16 @@ export function OrcamentosManager() {
 
           {/* Serviços */}
           <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Serviços</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {dict.orc.servicos}
+            </h3>
 
             {form.servicos.map((s, i) => (
               <div key={s.id} className="flex items-start gap-2">
                 <div className="flex-1">
                   <input
                     className={inputCls}
-                    placeholder={`Serviço ${i + 1}`}
+                    placeholder={dict.orc.servicoN(i + 1)}
                     value={s.descricao}
                     onChange={(e) =>
                       updateServico(s.id, "descricao", e.target.value)
@@ -947,7 +883,7 @@ export function OrcamentosManager() {
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="Valor"
+                    placeholder={dict.orc.valor}
                     value={s.valor}
                     onChange={(e) => updateServico(s.id, "valor", e.target.value)}
                   />
@@ -962,8 +898,8 @@ export function OrcamentosManager() {
                         atual === s.id ? null : s.id,
                       )
                     }
-                    title="Escolher de Meus Serviços"
-                    aria-label="Escolher de Meus Serviços"
+                    title={dict.orc.escolherCatalogo}
+                    aria-label={dict.orc.escolherCatalogo}
                     className="mt-1 rounded-lg border border-gray-300 dark:border-gray-700 p-2 text-gray-600 dark:text-gray-300 transition hover:bg-gray-50 dark:hover:bg-gray-800"
                   >
                     <ListPlus className="size-4" />
@@ -979,9 +915,9 @@ export function OrcamentosManager() {
                       <ul className="absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-1 shadow-lg">
                         {catalogo.length === 0 ? (
                           <li className="px-3 py-3 text-center text-xs text-gray-500 dark:text-gray-400">
-                            Nenhum serviço cadastrado.
+                            {dict.orc.nenhumServicoCadastrado}
                             <br />
-                            Cadastre em “Meus Serviços”.
+                            {dict.orc.cadastreEm}
                           </li>
                         ) : (
                           catalogo.map((serv) => (
@@ -997,7 +933,7 @@ export function OrcamentosManager() {
                                   {serv.nome}
                                 </span>
                                 <span className="shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                                  {fmtBRL(serv.preco)}
+                                  {fmt(serv.preco)}
                                 </span>
                               </button>
                             </li>
@@ -1013,7 +949,7 @@ export function OrcamentosManager() {
                     type="button"
                     onClick={() => removeServico(s.id)}
                     className="mt-1 rounded-lg p-2 text-red-600 transition hover:bg-red-50 dark:hover:bg-red-950"
-                    aria-label="Remover serviço"
+                    aria-label={dict.serv.remover}
                   >
                     <Trash2 className="size-4" />
                   </button>
@@ -1027,13 +963,15 @@ export function OrcamentosManager() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               <Plus className="size-4" />
-              Adicionar serviço
+              {dict.orc.adicionarServico}
             </button>
 
             <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 pt-3">
-              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Total</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {dict.orc.total}
+              </span>
               <span className="text-base font-bold" style={{ color: cor }}>
-                {fmtBRL(total)}
+                {fmt(total)}
               </span>
             </div>
           </section>
@@ -1041,7 +979,7 @@ export function OrcamentosManager() {
           {/* Forma de pagamento */}
           <section className="space-y-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Forma de Pagamento
+              {dict.orc.formaPagamento}
             </h3>
 
             {/* Seletor das 3 opções */}
@@ -1050,15 +988,19 @@ export function OrcamentosManager() {
                 [
                   {
                     v: "unico",
-                    titulo: "Pagamento único",
-                    desc: "À vista, valor total",
+                    titulo: dict.orc.pagUnico,
+                    desc: dict.orc.pagUnicoDesc,
                   },
                   {
                     v: "entrada_restante",
-                    titulo: "Entrada + restante",
-                    desc: "Dois pagamentos",
+                    titulo: dict.orc.pagEntrada,
+                    desc: dict.orc.pagEntradaDesc,
                   },
-                  { v: "parcelado", titulo: "Parcelado", desc: "De 2x a 12x" },
+                  {
+                    v: "parcelado",
+                    titulo: dict.orc.pagParcelado,
+                    desc: dict.orc.pagParceladoDesc,
+                  },
                 ] as const
               ).map((opt) => {
                 const ativo = form.opcao_pagamento === opt.v;
@@ -1076,7 +1018,9 @@ export function OrcamentosManager() {
                     <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {opt.titulo}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{opt.desc}</div>
+                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {opt.desc}
+                    </div>
                   </button>
                 );
               })}
@@ -1087,7 +1031,7 @@ export function OrcamentosManager() {
               <div className="space-y-3 rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
                 <div>
                   <label htmlFor="pct_entrada" className={labelCls}>
-                    Percentual de entrada (%)
+                    {dict.orc.percentualEntrada}
                   </label>
                   <input
                     id="pct_entrada"
@@ -1106,18 +1050,18 @@ export function OrcamentosManager() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-white dark:bg-gray-900 p-2 text-center">
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Entrada ({plano.pct}%)
+                        {dict.orc.entrada} ({plano.pct}%)
                       </div>
                       <div className="font-bold text-gray-900 dark:text-gray-100">
-                        {fmtBRL(plano.entrada)}
+                        {fmt(plano.entrada)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-white dark:bg-gray-900 p-2 text-center">
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Restante ({(100 - plano.pct).toFixed(0)}%)
+                        {dict.orc.restante} ({(100 - plano.pct).toFixed(0)}%)
                       </div>
                       <div className="font-bold text-gray-900 dark:text-gray-100">
-                        {fmtBRL(plano.restante)}
+                        {fmt(plano.restante)}
                       </div>
                     </div>
                   </div>
@@ -1131,7 +1075,7 @@ export function OrcamentosManager() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label htmlFor="parcelas" className={labelCls}>
-                      Número de parcelas
+                      {dict.orc.numParcelas}
                     </label>
                     <select
                       id="parcelas"
@@ -1148,7 +1092,7 @@ export function OrcamentosManager() {
                   </div>
                   <div>
                     <label htmlFor="tipo_parc" className={labelCls}>
-                      Tipo de parcelamento
+                      {dict.orc.tipoParcelamento}
                     </label>
                     <select
                       id="tipo_parc"
@@ -1161,9 +1105,9 @@ export function OrcamentosManager() {
                         )
                       }
                     >
-                      <option value="iguais">Parcelas iguais</option>
+                      <option value="iguais">{dict.orc.parcelasIguais}</option>
                       <option value="entrada_diferenciada">
-                        Entrada diferenciada
+                        {dict.orc.entradaDiferenciada}
                       </option>
                     </select>
                   </div>
@@ -1173,7 +1117,7 @@ export function OrcamentosManager() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label htmlFor="entrada_tipo" className={labelCls}>
-                        Entrada em
+                        {dict.orc.entradaEm}
                       </label>
                       <select
                         id="entrada_tipo"
@@ -1186,15 +1130,19 @@ export function OrcamentosManager() {
                           )
                         }
                       >
-                        <option value="percentual">Percentual (%)</option>
-                        <option value="valor">Valor (R$)</option>
+                        <option value="percentual">
+                          {dict.orc.percentualOpt}
+                        </option>
+                        <option value="valor">
+                          {dict.orc.valorOpt(simbolo)}
+                        </option>
                       </select>
                     </div>
                     <div>
                       <label htmlFor="entrada_valor" className={labelCls}>
                         {form.entrada_tipo === "percentual"
-                          ? "% da entrada"
-                          : "Valor da entrada (R$)"}
+                          ? dict.orc.pctEntradaLabel
+                          : dict.orc.valorEntradaLabel(simbolo)}
                       </label>
                       <input
                         id="entrada_valor"
@@ -1221,10 +1169,12 @@ export function OrcamentosManager() {
                             className="border-b border-gray-100 dark:border-gray-800 last:border-0"
                           >
                             <td className="py-1.5 text-gray-600 dark:text-gray-300">
-                              {p.entrada ? "Entrada" : `Parcela ${p.numero}`}
+                              {p.entrada
+                                ? dict.orc.entrada
+                                : dict.orc.parcelaN(p.numero)}
                             </td>
                             <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-gray-100">
-                              {fmtBRL(p.valor)}
+                              {fmt(p.valor)}
                             </td>
                           </tr>
                         ))}
@@ -1238,17 +1188,19 @@ export function OrcamentosManager() {
 
           {/* Nota */}
           <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Observações</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {dict.orc.observacoes}
+            </h3>
             <div>
               <label htmlFor="nota" className={labelCls}>
-                Nota adicional
+                {dict.orc.notaAdicional}
               </label>
               <input
                 id="nota"
                 className={inputCls}
                 value={form.nota}
                 onChange={(e) => setForm((f) => ({ ...f, nota: e.target.value }))}
-                placeholder="Observações, prazo de entrega..."
+                placeholder={dict.orc.notaPlaceholder}
               />
             </div>
           </section>
@@ -1256,25 +1208,25 @@ export function OrcamentosManager() {
           {/* Modelo visual do PDF */}
           <section className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Modelo do PDF
+              {dict.orc.modeloPdf}
             </h3>
             <div className="grid gap-2 sm:grid-cols-3">
               {(
                 [
                   {
                     v: "classico",
-                    titulo: "Clássico",
-                    desc: "Formal, preto e branco",
+                    titulo: dict.orc.classico,
+                    desc: dict.orc.classicoDesc,
                   },
                   {
                     v: "moderno",
-                    titulo: "Moderno",
-                    desc: "Cores da sua marca",
+                    titulo: dict.orc.moderno,
+                    desc: dict.orc.modernoDesc,
                   },
                   {
                     v: "simples",
-                    titulo: "Simples",
-                    desc: "Compacto e direto",
+                    titulo: dict.orc.simples,
+                    desc: dict.orc.simplesDesc,
                   },
                 ] as const
               ).map((opt) => {
@@ -1293,7 +1245,9 @@ export function OrcamentosManager() {
                     <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {opt.titulo}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{opt.desc}</div>
+                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {opt.desc}
+                    </div>
                   </button>
                 );
               })}
@@ -1314,7 +1268,7 @@ export function OrcamentosManager() {
               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 lg:hidden"
             >
               <Eye className="size-4" />
-              {showPreview ? "Ocultar prévia" : "Ver prévia"}
+              {showPreview ? dict.orc.ocultarPrevia : dict.orc.verPrevia}
             </button>
             <button
               type="button"
@@ -1323,7 +1277,11 @@ export function OrcamentosManager() {
               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60"
             >
               {salvo ? <Check className="size-4" /> : <Save className="size-4" />}
-              {salvando ? "Salvando..." : salvo ? "Salvo" : "Salvar"}
+              {salvando
+                ? dict.common.salvando
+                : salvo
+                ? dict.common.salvo
+                : dict.orc.salvar}
             </button>
             <button
               type="button"
@@ -1332,7 +1290,7 @@ export function OrcamentosManager() {
               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800 disabled:opacity-60"
             >
               <FileDown className="size-4" />
-              {gerando ? "Gerando PDF..." : "Salvar + PDF"}
+              {gerando ? dict.orc.gerandoPdf : dict.orc.salvarPdf}
             </button>
           </div>
         </div>
@@ -1340,7 +1298,7 @@ export function OrcamentosManager() {
         {/* ── Prévia do PDF ── */}
         <div className={showPreview ? "block" : "hidden lg:block"}>
           <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-            Prévia do documento — o PDF terá aparência idêntica.
+            {dict.orc.previaDoc}
           </p>
 
           <div

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Save } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { useI18n } from "@/components/i18n-provider";
 import type { Tenant } from "@/lib/types";
 
 const inputCls =
@@ -26,6 +27,7 @@ function normalizarHex(valor: string): string | null {
 
 export function ConfiguracoesForm() {
   const supabase = createClient();
+  const { dict, fmt, moeda, simbolo } = useI18n();
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -81,12 +83,12 @@ export function ConfiguracoesForm() {
   async function salvar() {
     setErro(null);
     if (!tenantId) {
-      setErro("Não foi possível identificar seu tenant. Refaça o login.");
+      setErro(dict.orc.erroTenant);
       return;
     }
     const hex = normalizarHex(corTexto);
     if (!hex) {
-      setErro("Informe uma cor hexadecimal válida (ex.: #1D4ED8).");
+      setErro(dict.cfg.erroHex);
       return;
     }
 
@@ -99,7 +101,7 @@ export function ConfiguracoesForm() {
 
     if (error) {
       console.error("[ConfiguracoesForm] erro ao salvar cor:", error);
-      setErro("Não foi possível salvar a cor.");
+      setErro(dict.cfg.erroSalvar);
       return;
     }
     setCorTexto(hex);
@@ -109,7 +111,7 @@ export function ConfiguracoesForm() {
   if (carregando) {
     return (
       <p className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-        Carregando...
+        {dict.common.carregando}
       </p>
     );
   }
@@ -118,27 +120,56 @@ export function ConfiguracoesForm() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-          Configurações
+          {dict.cfg.titulo}
         </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Personalize a cor da sua marca usada nos orçamentos em PDF.
+          {dict.cfg.subtitulo}
         </p>
       </div>
+
+      {/* Idioma e moeda (somente leitura — definidos pelo admin) */}
+      <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          {dict.cfg.regional}
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {dict.cfg.regionalDesc}
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {dict.cfg.idiomaLabel}
+            </div>
+            <div className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100">
+              {dict.cfg.idiomaNome}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {dict.cfg.moedaLabel}
+            </div>
+            <div className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100">
+              {moeda} ({simbolo})
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Seletor de cor */}
       <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-          Cor da marca
+          {dict.cfg.corMarca}
         </h3>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Essa cor é aplicada automaticamente no template{" "}
-          <strong>Moderno</strong> do PDF (cabeçalho, total e destaques).
+          {dict.cfg.corMarcaDescA}
+          <strong>{dict.cfg.templateModerno}</strong>
+          {dict.cfg.corMarcaDescB}
         </p>
 
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <label htmlFor="cor_picker" className={labelCls}>
-              Seletor
+              {dict.cfg.seletor}
             </label>
             <input
               id="cor_picker"
@@ -154,7 +185,7 @@ export function ConfiguracoesForm() {
 
           <div className="w-40">
             <label htmlFor="cor_hex" className={labelCls}>
-              Código hexadecimal
+              {dict.cfg.codigoHex}
             </label>
             <input
               id="cor_hex"
@@ -177,7 +208,7 @@ export function ConfiguracoesForm() {
               aria-hidden
             />
             <span className="text-xs text-gray-500 dark:text-gray-400">
-              {hexValido ? "Prévia da cor" : "Hex inválido — usando padrão"}
+              {hexValido ? dict.cfg.previaCor : dict.cfg.hexInvalido}
             </span>
           </div>
         </div>
@@ -186,7 +217,7 @@ export function ConfiguracoesForm() {
       {/* Prévia: mini-cabeçalho do template Moderno com a cor escolhida */}
       <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-          Prévia no PDF (Moderno)
+          {dict.cfg.previaPdf}
         </h3>
         <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
           <div
@@ -210,16 +241,18 @@ export function ConfiguracoesForm() {
                 letterSpacing: "2px",
               }}
             >
-              Orçamento
+              {dict.pdf.titulo}
             </span>
           </div>
           <div
             className="flex items-center justify-between bg-white px-6 py-4 dark:bg-white"
             style={{ color: "#111" }}
           >
-            <span style={{ fontSize: "13px", color: "#555" }}>Total</span>
+            <span style={{ fontSize: "13px", color: "#555" }}>
+              {dict.pdf.total}
+            </span>
             <span style={{ fontSize: "20px", fontWeight: 800, color: corPreview }}>
-              R$ 1.250,00
+              {fmt(1250)}
             </span>
           </div>
         </div>
@@ -239,7 +272,11 @@ export function ConfiguracoesForm() {
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-gray-800 disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
         >
           {salvo ? <Check className="size-4" /> : <Save className="size-4" />}
-          {salvando ? "Salvando..." : salvo ? "Salvo" : "Salvar cor"}
+          {salvando
+            ? dict.common.salvando
+            : salvo
+            ? dict.common.salvo
+            : dict.cfg.salvarCor}
         </button>
       </div>
     </div>

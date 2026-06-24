@@ -4,12 +4,15 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Loader2, Check, ImageOff } from "lucide-react";
 import { createClient } from "@/lib/supabase";
-import type { Tenant, Pais, MoedaPreferida } from "@/lib/types";
+import type { Tenant, Idioma, Pais, MoedaPreferida } from "@/lib/types";
 
 const BUCKET = "logos";
 
-/** Idioma derivado do país — mantém os dados consistentes sem campo extra. */
-const IDIOMA_POR_PAIS: Record<Pais, "pt" | "es"> = { BR: "pt", AR: "es" };
+/**
+ * País derivado do idioma — mantém a coluna `pais` (NOT NULL) consistente
+ * sem expor um campo extra. Português -> Brasil, Español -> Argentina.
+ */
+const PAIS_POR_IDIOMA: Record<Idioma, Pais> = { pt: "BR", es: "AR" };
 
 const inputCls =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
@@ -36,9 +39,12 @@ export function TenantForm({ tenant }: Props) {
   const [corPrimaria, setCorPrimaria] = useState(
     tenant?.cor_primaria ?? "#0F0F0F",
   );
-  const [pais, setPais] = useState<Pais>(tenant?.pais ?? "BR");
+  const [idioma, setIdioma] = useState<Idioma>(tenant?.idioma ?? "pt");
+  // Moeda escolhida quando idioma = es (Português usa BRL fixo).
   const [moedaPreferida, setMoedaPreferida] = useState<MoedaPreferida>(
-    tenant?.moeda_preferida ?? "ARS",
+    tenant?.moeda_preferida && tenant.moeda_preferida !== "BRL"
+      ? tenant.moeda_preferida
+      : "ARS",
   );
   const [ativo, setAtivo] = useState<boolean>(tenant?.ativo ?? true);
 
@@ -99,10 +105,11 @@ export function TenantForm({ tenant }: Props) {
       telefone: telefone.trim() || null,
       logo_url: logoUrl,
       cor_primaria: corPrimaria,
-      pais,
-      idioma: IDIOMA_POR_PAIS[pais],
-      // Moeda preferida só faz sentido para AR; BR usa BRL implícito.
-      moeda_preferida: pais === "AR" ? moedaPreferida : null,
+      // País derivado do idioma (coluna NOT NULL, check BR/AR).
+      pais: PAIS_POR_IDIOMA[idioma],
+      idioma,
+      // Português -> BRL fixo; Español -> moeda escolhida (ARS ou USD).
+      moeda_preferida: idioma === "pt" ? "BRL" : moedaPreferida,
       ativo,
     };
 
@@ -261,31 +268,30 @@ export function TenantForm({ tenant }: Props) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="pais" className={labelCls}>
-              País
+            <label htmlFor="idioma" className={labelCls}>
+              Idioma do app
             </label>
             <select
-              id="pais"
+              id="idioma"
               className={inputCls}
-              value={pais}
-              onChange={(e) => setPais(e.target.value as Pais)}
+              value={idioma}
+              onChange={(e) => setIdioma(e.target.value as Idioma)}
             >
-              <option value="BR">🇧🇷 Brasil</option>
-              <option value="AR">🇦🇷 Argentina</option>
+              <option value="pt">🇧🇷 Português</option>
+              <option value="es">🇦🇷 Español</option>
             </select>
             <p className="mt-1 text-xs text-gray-400">
-              Define o idioma do app ({IDIOMA_POR_PAIS[pais] === "pt"
-                ? "Português"
-                : "Espanhol"}
-              ).
+              {idioma === "pt"
+                ? "Moeda fixa: BRL (R$)."
+                : "Escolha a moeda dos orçamentos ao lado."}
             </p>
           </div>
 
-          {/* Moeda preferida — só habilitada para AR */}
-          {pais === "AR" && (
+          {/* Moeda — só para Español (Português usa BRL fixo) */}
+          {idioma === "es" && (
             <div>
               <label htmlFor="moeda" className={labelCls}>
-                Moeda preferida
+                Moeda
               </label>
               <select
                 id="moeda"

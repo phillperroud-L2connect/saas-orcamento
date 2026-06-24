@@ -2,20 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const LINKS = [
-  { href: "/dashboard/orcamentos", label: "Orçamentos" },
-  { href: "/dashboard/financeiro", label: "Financeiro" },
-  { href: "/dashboard/servicos", label: "Meus Serviços" },
-  { href: "/dashboard/configuracoes", label: "Configurações" },
-];
+import { useI18n } from "@/components/i18n-provider";
 
 export function DashboardNav() {
   const pathname = usePathname();
+  const { dict } = useI18n();
+
+  const links = [
+    { href: "/dashboard/orcamentos", label: dict.nav.orcamentos },
+    { href: "/dashboard/financeiro", label: dict.nav.financeiro },
+    { href: "/dashboard/servicos", label: dict.nav.servicos },
+    { href: "/dashboard/configuracoes", label: dict.nav.configuracoes },
+  ];
 
   return (
     <nav className="flex items-center gap-1">
-      {LINKS.map((l) => {
+      {links.map((l) => {
         const ativo = pathname === l.href || pathname.startsWith(`${l.href}/`);
         return (
           <Link

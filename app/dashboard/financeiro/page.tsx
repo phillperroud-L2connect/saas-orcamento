@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { getDict } from "@/lib/i18n";
+import { fmtData, fmtMoeda, moedaDoTenant } from "@/lib/moeda";
+import type { Idioma, MoedaPreferida } from "@/lib/types";
 import {
   FaturamentoChart,
   type PontoFaturamento,
@@ -24,33 +27,17 @@ type OrcamentoRow = {
   clientes: { nome: string } | null;
 };
 
-function fmtBRL(v: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(v);
-}
-
-function fmtDataBR(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
+const STATUS_CLS: Record<OrcamentoRow["status"], string> = {
+  rascunho: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
+  enviado: "bg-blue-50 text-blue-700",
+  aprovado: "bg-green-50 text-green-700",
+  recusado: "bg-red-50 text-red-700",
+};
 
 /** Chave AAAA-MM para agrupar por mês independente de fuso. */
 function chaveMes(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
-
-const MESES_CURTOS = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
-];
-
-const STATUS_STYLE: Record<OrcamentoRow["status"], { label: string; cls: string }> = {
-  rascunho: { label: "Rascunho", cls: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" },
-  enviado: { label: "Enviado", cls: "bg-blue-50 text-blue-700" },
-  aprovado: { label: "Aprovado", cls: "bg-green-50 text-green-700" },
-  recusado: { label: "Recusado", cls: "bg-red-50 text-red-700" },
-};
 
 export default async function FinanceiroPage() {
   const supabase = createServerSupabase();
@@ -61,6 +48,8 @@ export default async function FinanceiroPage() {
 
   // Resolve o tenant do usuário logado para filtrar explicitamente.
   let tenantId: string | null = null;
+  let idioma: Idioma = "pt";
+  let moeda: MoedaPreferida = "BRL";
   if (user) {
     const { data: userRow } = await supabase
       .from("users")
@@ -68,7 +57,33 @@ export default async function FinanceiroPage() {
       .eq("id", user.id)
       .single();
     tenantId = (userRow?.tenant_id as string | undefined) ?? null;
+
+    if (tenantId) {
+      const { data: tenantRow } = await supabase
+        .from("tenants")
+        .select("idioma, moeda_preferida")
+        .eq("id", tenantId)
+        .single();
+      if (tenantRow) {
+        idioma = (tenantRow.idioma as Idioma) ?? "pt";
+        moeda = moedaDoTenant(
+          tenantRow as { idioma: Idioma; moeda_preferida: MoedaPreferida | null },
+        );
+      }
+    }
   }
+
+  const dict = getDict(idioma);
+  const fmt = (v: number) => fmtMoeda(v, moeda);
+  const STATUS_STYLE: Record<
+    OrcamentoRow["status"],
+    { label: string; cls: string }
+  > = {
+    rascunho: { label: dict.lista.status.rascunho, cls: STATUS_CLS.rascunho },
+    enviado: { label: dict.lista.status.enviado, cls: STATUS_CLS.enviado },
+    aprovado: { label: dict.lista.status.aprovado, cls: STATUS_CLS.aprovado },
+    recusado: { label: dict.lista.status.recusado, cls: STATUS_CLS.recusado },
+  };
 
   // Carrega os orçamentos do tenant (RLS já restringe; o filtro é redundante e explícito).
   let orcamentos: OrcamentoRow[] = [];
@@ -122,7 +137,7 @@ export default async function FinanceiroPage() {
       .filter((o) => chaveMes(new Date(o.created_at)) === chave)
       .reduce((s, o) => s + num(o.total), 0);
     return {
-      mes: `${MESES_CURTOS[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
+      mes: `${dict.fin.meses[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
       total,
     };
   });
@@ -131,12 +146,15 @@ export default async function FinanceiroPage() {
 
   const cards = [
     {
-      titulo: "Faturado no mês",
-      valor: fmtBRL(faturadoMesAtual),
+      titulo: dict.fin.faturadoMes,
+      valor: fmt(faturadoMesAtual),
       sub:
         variacao === null
-          ? "Sem base no mês anterior"
-          : `${variacao >= 0 ? "▲" : "▼"} ${Math.abs(variacao).toFixed(0)}% vs mês anterior`,
+          ? dict.fin.semBase
+          : dict.fin.vsMesAnterior(
+              Number(Math.abs(variacao).toFixed(0)),
+              variacao >= 0,
+            ),
       subCls:
         variacao === null
           ? "text-gray-400 dark:text-gray-500"
@@ -146,23 +164,23 @@ export default async function FinanceiroPage() {
       destaque: true,
     },
     {
-      titulo: "Mês anterior",
-      valor: fmtBRL(faturadoMesAnterior),
-      sub: "Faturamento aprovado",
+      titulo: dict.fin.mesAnterior,
+      valor: fmt(faturadoMesAnterior),
+      sub: dict.fin.faturamentoAprovado,
       subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
     },
     {
-      titulo: "Ticket médio",
-      valor: fmtBRL(ticketMedio),
-      sub: `${aprovadosArr.length} ${aprovadosArr.length === 1 ? "orçamento aprovado" : "orçamentos aprovados"}`,
+      titulo: dict.fin.ticketMedio,
+      valor: fmt(ticketMedio),
+      sub: dict.fin.orcAprovados(aprovadosArr.length),
       subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
     },
     {
-      titulo: "Aprovados vs recusados",
+      titulo: dict.fin.aprovadosVsRecusados,
       valor: `${aprovadosArr.length} / ${recusadosArr.length}`,
-      sub: "Aprovados / recusados (total)",
+      sub: dict.fin.aprovadosRecusadosSub,
       subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
     },
@@ -174,9 +192,11 @@ export default async function FinanceiroPage() {
         {/* Cabeçalho */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Financeiro</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              {dict.fin.titulo}
+            </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Visão geral do seu faturamento e dos últimos orçamentos.
+              {dict.fin.subtitulo}
             </p>
           </div>
           <Link
@@ -184,7 +204,7 @@ export default async function FinanceiroPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             <ArrowLeft className="size-4" />
-            Voltar
+            {dict.common.voltar}
           </Link>
         </div>
 
@@ -224,35 +244,44 @@ export default async function FinanceiroPage() {
         <section className="mt-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
           <div className="mb-4 flex items-baseline justify-between">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Faturamento — últimos 6 meses
+              {dict.fin.faturamento6m}
             </h2>
-            <span className="text-xs text-gray-400 dark:text-gray-500">Orçamentos aprovados</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              {dict.fin.orcAprovadosLabel}
+            </span>
           </div>
-          <FaturamentoChart dados={serie} />
+          <FaturamentoChart
+            dados={serie}
+            moeda={moeda}
+            labelFaturado={dict.fin.faturado}
+            labelVazio={dict.fin.semFaturamento}
+          />
         </section>
 
         {/* Últimos orçamentos */}
         <section className="mt-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
           <div className="border-b border-gray-100 dark:border-gray-800 px-5 py-4">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Últimos orçamentos
+              {dict.fin.ultimos}
             </h2>
           </div>
 
           {ultimos.length === 0 ? (
             <div className="px-5 py-12 text-center text-sm text-gray-400 dark:text-gray-500">
-              Nenhum orçamento encontrado ainda.
+              {dict.fin.nenhum}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    <th className="px-5 py-3 font-medium">Nº</th>
-                    <th className="px-5 py-3 font-medium">Cliente</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Data</th>
-                    <th className="px-5 py-3 text-right font-medium">Valor</th>
+                    <th className="px-5 py-3 font-medium">{dict.fin.numero}</th>
+                    <th className="px-5 py-3 font-medium">{dict.fin.cliente}</th>
+                    <th className="px-5 py-3 font-medium">{dict.fin.status}</th>
+                    <th className="px-5 py-3 font-medium">{dict.fin.data}</th>
+                    <th className="px-5 py-3 text-right font-medium">
+                      {dict.fin.valor}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -260,7 +289,7 @@ export default async function FinanceiroPage() {
                     const st = STATUS_STYLE[o.status];
                     const cliente =
                       o.clientes?.nome ??
-                      o.titulo?.replace(/^Orçamento\s*—\s*/, "") ??
+                      o.titulo?.replace(/^(Orçamento|Presupuesto)\s*—\s*/, "") ??
                       "—";
                     return (
                       <tr
@@ -281,10 +310,10 @@ export default async function FinanceiroPage() {
                           </span>
                         </td>
                         <td className="px-5 py-3 text-gray-500 dark:text-gray-400">
-                          {fmtDataBR(o.created_at)}
+                          {fmtData(o.created_at, idioma)}
                         </td>
                         <td className="px-5 py-3 text-right font-semibold text-gray-900 dark:text-gray-100">
-                          {fmtBRL(num(o.total))}
+                          {fmt(num(o.total))}
                         </td>
                       </tr>
                     );
