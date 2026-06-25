@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Preference } from "mercadopago";
 import { getMercadoPagoClient, getSiteUrl } from "@/lib/mercadopago";
-import { getPlano } from "@/lib/planos";
+import { getPlano, getPrecoPorPeriodo, isPeriodo } from "@/lib/planos";
 
 /**
  * POST /api/mp/criar-preferencia
@@ -16,6 +16,7 @@ import { getPlano } from "@/lib/planos";
 export async function POST(req: Request) {
   let body: {
     plano?: string;
+    periodo?: string;
     nome?: string;
     email?: string;
     whatsapp?: string;
@@ -28,6 +29,8 @@ export async function POST(req: Request) {
   }
 
   const plano = getPlano(body.plano ?? "");
+  // Período opcional — default "mensal" caso o cliente não envie/envie inválido.
+  const periodo = isPeriodo(body.periodo ?? "") ? (body.periodo as "mensal" | "anual") : "mensal";
   const nome = body.nome?.trim() ?? "";
   const email = body.email?.trim() ?? "";
   const whatsapp = body.whatsapp?.trim() ?? "";
@@ -48,6 +51,10 @@ export async function POST(req: Request) {
   const siteUrl = getSiteUrl();
   const ehLocalhost = siteUrl.includes("localhost") || siteUrl.includes("127.0.0.1");
 
+  // Valor cobrado conforme o período escolhido (mensal x anual).
+  const unitPrice = getPrecoPorPeriodo(plano, periodo);
+  const sufixoPeriodo = periodo === "anual" ? "Anual" : "Mensal";
+
   try {
     const preference = new Preference(getMercadoPagoClient());
 
@@ -56,10 +63,10 @@ export async function POST(req: Request) {
         items: [
           {
             id: plano.id,
-            title: `Plano ${plano.nome} — Gerador de Orçamento`,
+            title: `Plano ${plano.nome} ${sufixoPeriodo} — Gerador de Orçamento`,
             description: plano.descricao,
             quantity: 1,
-            unit_price: plano.preco,
+            unit_price: unitPrice,
             currency_id: "ARS",
           },
         ],
@@ -70,6 +77,7 @@ export async function POST(req: Request) {
         // Dados do cliente que o webhook recupera ao confirmar o pagamento.
         metadata: {
           plano: plano.id,
+          periodo,
           nome,
           email,
           whatsapp,

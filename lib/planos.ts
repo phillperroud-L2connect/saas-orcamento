@@ -9,11 +9,16 @@
 
 export type PlanoId = "basico" | "pro";
 
+/** Periodicidade de cobrança escolhida no checkout. */
+export type Periodo = "mensal" | "anual";
+
 export type Plano = {
   id: PlanoId;
   nome: string;
   /** Valor cobrado por mês, em ARS. */
   preco: number;
+  /** Valor cobrado por ano, em ARS (equivale a 10 meses — 2 meses grátis). */
+  precoAnual: number;
   moeda: "ARS";
   descricao: string;
   destaque?: boolean;
@@ -25,6 +30,7 @@ export const PLANOS: Record<PlanoId, Plano> = {
     id: "basico",
     nome: "Básico",
     preco: 11980,
+    precoAnual: 119800,
     moeda: "ARS",
     descricao: "Para profissionais que estão começando a organizar seus orçamentos.",
     recursos: [
@@ -38,6 +44,7 @@ export const PLANOS: Record<PlanoId, Plano> = {
     id: "pro",
     nome: "Pro",
     preco: 19850,
+    precoAnual: 198500,
     moeda: "ARS",
     descricao: "Para quem precisa de mais controle, marca e relatórios.",
     destaque: true,
@@ -54,6 +61,16 @@ export const PLANOS: Record<PlanoId, Plano> = {
 /** Type guard: confirma se uma string é um PlanoId válido. */
 export function isPlanoId(valor: string): valor is PlanoId {
   return valor === "basico" || valor === "pro";
+}
+
+/** Type guard: confirma se uma string é um Periodo válido. */
+export function isPeriodo(valor: string): valor is Periodo {
+  return valor === "mensal" || valor === "anual";
+}
+
+/** Retorna o valor cobrado (em ARS) para o plano no período escolhido. */
+export function getPrecoPorPeriodo(plano: Plano, periodo: Periodo): number {
+  return periodo === "anual" ? plano.precoAnual : plano.preco;
 }
 
 /** Retorna o plano pelo id ou `null` se desconhecido. */

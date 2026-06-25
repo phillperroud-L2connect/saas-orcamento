@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import type { PlanoId } from "@/lib/planos";
+import type { Periodo, PlanoId } from "@/lib/planos";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -13,19 +13,20 @@ declare global {
 
 type Props = {
   plano: PlanoId;
+  periodo: Periodo;
   publicKey: string;
 };
 
 const inputCls =
-  "w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-sm text-white placeholder-white/30 outline-none transition focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/40";
-const labelCls = "mb-1.5 block text-xs font-medium text-white/55";
+  "w-full rounded-xl border border-[rgba(120,160,230,0.18)] bg-[rgba(120,160,230,0.05)] px-3.5 py-2.5 text-sm text-[#e8edf7] placeholder-[#6a7490] outline-none transition focus:border-[#3ea6ff]/70 focus:ring-1 focus:ring-[#3ea6ff]/40";
+const labelCls = "mb-1.5 block text-xs font-medium text-[#aab4c8]";
 
 /**
  * Formulário de checkout. Coleta os dados do cliente, cria a preferência via
  * /api/mp/criar-preferencia e renderiza o Wallet Brick do Mercado Pago
  * (botão oficial de pagamento) usando a NEXT_PUBLIC_MP_PUBLIC_KEY.
  */
-export function CheckoutForm({ plano, publicKey }: Props) {
+export function CheckoutForm({ plano, periodo, publicKey }: Props) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -69,6 +70,7 @@ export function CheckoutForm({ plano, publicKey }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plano,
+          periodo,
           nome: nome.trim(),
           email: email.trim(),
           whatsapp: whatsapp.trim(),
@@ -94,15 +96,15 @@ export function CheckoutForm({ plano, publicKey }: Props) {
   if (preferenceId) {
     return (
       <div className="mt-6">
-        <p className="mb-4 text-sm text-white/60">
-          Tudo certo, <strong className="text-white">{nome.trim()}</strong>.
+        <p className="mb-4 text-sm text-[#aab4c8]">
+          Tudo certo, <strong className="text-[#e8edf7]">{nome.trim()}</strong>.
           Finalize o pagamento abaixo:
         </p>
         <div id="wallet_container" ref={walletRef} />
         {initPoint && (
           <a
             href={initPoint}
-            className="mt-3 block text-center text-xs text-white/40 underline-offset-2 hover:text-white/70 hover:underline"
+            className="mt-3 block text-center text-xs text-[#6a7490] underline-offset-2 hover:text-[#aab4c8] hover:underline"
           >
             O botão não apareceu? Pagar pelo Mercado Pago →
           </a>
@@ -141,14 +143,14 @@ export function CheckoutForm({ plano, publicKey }: Props) {
           placeholder="voce@email.com"
           required
         />
-        <p className="mt-1 text-xs text-white/30">
+        <p className="mt-1 text-xs text-[#6a7490]">
           É aqui que enviaremos o acesso à sua conta.
         </p>
       </div>
 
       <div>
         <label htmlFor="whatsapp" className={labelCls}>
-          WhatsApp <span className="text-white/30">(opcional)</span>
+          WhatsApp <span className="text-[#6a7490]">(opcional)</span>
         </label>
         <input
           id="whatsapp"
@@ -168,7 +170,12 @@ export function CheckoutForm({ plano, publicKey }: Props) {
       <button
         type="submit"
         disabled={carregando}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#0A0A0A] transition hover:bg-emerald-300 disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-60"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #3ea6ff 0%, #1a5cff 100%)",
+          boxShadow:
+            "0 8px 28px rgba(62,166,255,0.30), inset 0 1px 0 rgba(255,255,255,0.2)",
+        }}
       >
         {carregando && <Loader2 className="size-4 animate-spin" />}
         {carregando ? "Preparando pagamento..." : "Ir para o pagamento"}
