@@ -9,9 +9,11 @@ import {
   type Plano,
 } from "@/lib/planos";
 import { CheckoutForm } from "./checkout-form";
+import { TEXTOS, getPlanoTextos, type Lang } from "./i18n";
 
 type Props = {
   plano: Plano;
+  lang: Lang;
   publicKey: string;
 };
 
@@ -20,8 +22,11 @@ type Props = {
  * para que ele controle, ao mesmo tempo, o preço exibido no resumo e o valor
  * enviado ao Mercado Pago pelo formulário.
  */
-export function CheckoutPanel({ plano, publicKey }: Props) {
+export function CheckoutPanel({ plano, lang, publicKey }: Props) {
   const [periodo, setPeriodo] = useState<Periodo>("mensal");
+
+  const t = TEXTOS[lang];
+  const planoTextos = getPlanoTextos(plano.id, lang);
 
   const preco = getPrecoPorPeriodo(plano, periodo);
   const ehAnual = periodo === "anual";
@@ -37,11 +42,11 @@ export function CheckoutPanel({ plano, publicKey }: Props) {
           style={{ fontFamily: "var(--font-l2-mono), monospace" }}
         >
           <span className="h-px w-6 bg-[#6ee0ff]" />
-          Checkout
+          {t.eyebrow}
         </p>
 
         <h1 className="mt-5 text-5xl font-medium leading-[0.95] tracking-tight sm:text-6xl">
-          Plano
+          {t.planoLabel}
           <br />
           <span
             style={{
@@ -57,7 +62,7 @@ export function CheckoutPanel({ plano, publicKey }: Props) {
         </h1>
 
         <p className="mt-5 max-w-sm text-sm leading-relaxed text-[#aab4c8]">
-          {plano.descricao}
+          {planoTextos.descricao}
         </p>
 
         {/* ------------------------- Toggle mensal/anual -------------------- */}
@@ -84,7 +89,7 @@ export function CheckoutPanel({ plano, publicKey }: Props) {
                     : undefined
                 }
               >
-                {opt === "mensal" ? "Mensal" : "Anual"}
+                {opt === "mensal" ? t.mensal : t.anual}
                 {opt === "anual" && (
                   <span
                     className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
@@ -93,7 +98,7 @@ export function CheckoutPanel({ plano, publicKey }: Props) {
                         : "bg-[#3ea6ff]/15 text-[#6ee0ff]"
                     }`}
                   >
-                    2 MESES GRÁTIS
+                    {t.badge2meses}
                   </span>
                 )}
               </button>
@@ -107,18 +112,17 @@ export function CheckoutPanel({ plano, publicKey }: Props) {
             {formatarPrecoARS(preco)}
           </span>
           <span className="mb-1.5 text-sm text-[#6a7490]">
-            {ehAnual ? "/ ano" : "/ mês"}
+            {ehAnual ? t.porAno : t.porMes}
           </span>
         </div>
         {ehAnual && (
           <p className="mt-2 text-xs text-[#6ee0ff]">
-            Equivale a {formatarPrecoARS(equivalenteMensal)}/mês — você economiza
-            2 meses no plano anual.
+            {t.equivalente(formatarPrecoARS(equivalenteMensal))}
           </p>
         )}
 
         <ul className="mt-8 space-y-3">
-          {plano.recursos.map((r) => (
+          {planoTextos.recursos.map((r) => (
             <li
               key={r}
               className="flex items-center gap-3 text-sm text-[#aab4c8]"
@@ -138,18 +142,19 @@ export function CheckoutPanel({ plano, publicKey }: Props) {
           className="rounded-[22px] border border-[rgba(120,160,230,0.18)] bg-[rgba(120,160,230,0.04)] p-6 backdrop-blur-sm sm:p-8"
           style={{ boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}
         >
-          <h2 className="text-lg font-medium text-[#e8edf7]">Seus dados</h2>
+          <h2 className="text-lg font-medium text-[#e8edf7]">{t.seusDados}</h2>
           <p className="mt-1 text-sm text-[#6a7490]">
-            Preencha para continuar ao pagamento seguro.
+            {t.seusDadosSubtitulo}
           </p>
           <CheckoutForm
             plano={plano.id}
             periodo={periodo}
+            lang={lang}
             publicKey={publicKey}
           />
         </div>
         <p className="mt-4 text-center text-xs text-[#6a7490]">
-          Pagamento processado com segurança pelo Mercado Pago.
+          {t.pagamentoSeguro}
         </p>
       </section>
     </div>

@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { getPlano } from "@/lib/planos";
 import { CheckoutPanel } from "./checkout-panel";
+import { TEXTOS, resolverLang } from "./i18n";
 
 /* Tipografia do design system L2 — escopada à página de checkout.
    (O layout global usa Geist; não o alteramos para não afetar o app.) */
@@ -21,12 +22,16 @@ const l2Mono = JetBrains_Mono({
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: { plano: string } };
+type Props = {
+  params: { plano: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
+};
 
-export function generateMetadata({ params }: Props) {
+export function generateMetadata({ params, searchParams }: Props) {
   const plano = getPlano(params.plano);
+  const t = TEXTOS[resolverLang(searchParams?.lang)];
   return {
-    title: plano ? `Contratar plano ${plano.nome}` : "Checkout",
+    title: plano ? t.metaTitle(plano.nome) : t.metaCheckout,
   };
 }
 
@@ -36,9 +41,11 @@ export function generateMetadata({ params }: Props) {
  * Mostra o resumo do plano com toggle mensal/anual e o formulário que cria a
  * preferência de pagamento no Mercado Pago.
  */
-export default function CheckoutPage({ params }: Props) {
+export default function CheckoutPage({ params, searchParams }: Props) {
   const plano = getPlano(params.plano);
   if (!plano) notFound();
+
+  const lang = resolverLang(searchParams?.lang);
 
   return (
     <main
@@ -69,6 +76,7 @@ export default function CheckoutPage({ params }: Props) {
 
       <CheckoutPanel
         plano={plano}
+        lang={lang}
         publicKey={process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ?? ""}
       />
     </main>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Periodo, PlanoId } from "@/lib/planos";
+import { TEXTOS, localeMercadoPago, type Lang } from "./i18n";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -14,6 +15,7 @@ declare global {
 type Props = {
   plano: PlanoId;
   periodo: Periodo;
+  lang: Lang;
   publicKey: string;
 };
 
@@ -26,7 +28,9 @@ const labelCls = "mb-1.5 block text-xs font-medium text-[#aab4c8]";
  * /api/mp/criar-preferencia e renderiza o Wallet Brick do Mercado Pago
  * (botão oficial de pagamento) usando a NEXT_PUBLIC_MP_PUBLIC_KEY.
  */
-export function CheckoutForm({ plano, periodo, publicKey }: Props) {
+export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
+  const t = TEXTOS[lang];
+
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -45,21 +49,23 @@ export function CheckoutForm({ plano, periodo, publicKey }: Props) {
 
     walletRef.current.innerHTML = "";
     try {
-      const mp = new window.MercadoPago(publicKey, { locale: "es-AR" });
+      const mp = new window.MercadoPago(publicKey, {
+        locale: localeMercadoPago(lang),
+      });
       mp.bricks().create("wallet", "wallet_container", {
         initialization: { preferenceId },
       });
     } catch (e) {
       console.error("[checkout] falha ao montar wallet:", e);
     }
-  }, [preferenceId, publicKey]);
+  }, [preferenceId, publicKey, lang]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
 
     if (!nome.trim() || !email.trim()) {
-      setErro("Preencha nome e e-mail.");
+      setErro(t.erroNomeEmail);
       return;
     }
 
@@ -79,14 +85,14 @@ export function CheckoutForm({ plano, periodo, publicKey }: Props) {
 
       const data = await res.json();
       if (!res.ok) {
-        setErro(data.erro ?? "Não foi possível iniciar o pagamento.");
+        setErro(data.erro ?? t.erroIniciar);
         return;
       }
 
       setPreferenceId(data.preferenceId);
       setInitPoint(data.initPoint ?? null);
     } catch {
-      setErro("Erro de conexão. Tente novamente.");
+      setErro(t.erroConexao);
     } finally {
       setCarregando(false);
     }
@@ -97,8 +103,9 @@ export function CheckoutForm({ plano, periodo, publicKey }: Props) {
     return (
       <div className="mt-6">
         <p className="mb-4 text-sm text-[#aab4c8]">
-          Tudo certo, <strong className="text-[#e8edf7]">{nome.trim()}</strong>.
-          Finalize o pagamento abaixo:
+          {t.saudacao}
+          <strong className="text-[#e8edf7]">{nome.trim()}</strong>.{" "}
+          {t.finalizeAbaixo}
         </p>
         <div id="wallet_container" ref={walletRef} />
         {initPoint && (
@@ -106,7 +113,7 @@ export function CheckoutForm({ plano, periodo, publicKey }: Props) {
             href={initPoint}
             className="mt-3 block text-center text-xs text-[#6a7490] underline-offset-2 hover:text-[#aab4c8] hover:underline"
           >
-            O botão não apareceu? Pagar pelo Mercado Pago →
+            {t.botaoNaoApareceu}
           </a>
         )}
       </div>
@@ -118,21 +125,21 @@ export function CheckoutForm({ plano, periodo, publicKey }: Props) {
     <form onSubmit={handleSubmit} className="mt-6 space-y-4">
       <div>
         <label htmlFor="nome" className={labelCls}>
-          Nome completo *
+          {t.nomeLabel}
         </label>
         <input
           id="nome"
           className={inputCls}
           value={nome}
           onChange={(e) => setNome(e.target.value)}
-          placeholder="Como devemos te chamar"
+          placeholder={t.nomePlaceholder}
           required
         />
       </div>
 
       <div>
         <label htmlFor="email" className={labelCls}>
-          E-mail *
+          {t.emailLabel}
         </label>
         <input
           id="email"
@@ -140,24 +147,25 @@ export function CheckoutForm({ plano, periodo, publicKey }: Props) {
           className={inputCls}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="voce@email.com"
+          placeholder={t.emailPlaceholder}
           required
         />
         <p className="mt-1 text-xs text-[#6a7490]">
-          É aqui que enviaremos o acesso à sua conta.
+          {t.emailHint}
         </p>
       </div>
 
       <div>
         <label htmlFor="whatsapp" className={labelCls}>
-          WhatsApp <span className="text-[#6a7490]">(opcional)</span>
+          {t.whatsappLabel}{" "}
+          <span className="text-[#6a7490]">{t.whatsappOpcional}</span>
         </label>
         <input
           id="whatsapp"
           className={inputCls}
           value={whatsapp}
           onChange={(e) => setWhatsapp(e.target.value)}
-          placeholder="+54 9 11 1234-5678"
+          placeholder={t.whatsappPlaceholder}
         />
       </div>
 
@@ -178,7 +186,7 @@ export function CheckoutForm({ plano, periodo, publicKey }: Props) {
         }}
       >
         {carregando && <Loader2 className="size-4 animate-spin" />}
-        {carregando ? "Preparando pagamento..." : "Ir para o pagamento"}
+        {carregando ? t.btnPreparando : t.btnIr}
       </button>
     </form>
   );
