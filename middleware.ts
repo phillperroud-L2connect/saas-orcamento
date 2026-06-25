@@ -3,7 +3,15 @@ import { createServerClient } from "@supabase/ssr";
 import { isAdminUser } from "@/lib/admin";
 
 // Rotas públicas — acessíveis sem autenticação.
-const ROTAS_PUBLICAS = ["/login", "/cadastro", "/admin/login"];
+// /checkout e /api/mp são públicas: a venda acontece antes de existir conta,
+// e o webhook do Mercado Pago chega sem sessão de usuário.
+const ROTAS_PUBLICAS = [
+  "/login",
+  "/cadastro",
+  "/admin/login",
+  "/checkout",
+  "/api/mp",
+];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
