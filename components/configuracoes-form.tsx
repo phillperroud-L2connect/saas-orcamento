@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Check, Save } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Save, Upload, Loader2, ImageOff } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
 import type { Tenant } from "@/lib/types";
+
+/** Bucket de armazenamento dos logos (mesmo usado no painel admin). */
+const BUCKET_LOGOS = "logos";
 
 const inputCls =
   "w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
@@ -28,6 +31,7 @@ function normalizarHex(valor: string): string | null {
 export function ConfiguracoesForm() {
   const supabase = createClient();
   const { dict, fmt, moeda, simbolo } = useI18n();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -35,6 +39,11 @@ export function ConfiguracoesForm() {
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Logo da empresa (Supabase Storage + coluna tenants.logo_url).
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const [logoSalvo, setLogoSalvo] = useState(false);
 
   // Campo de cor (texto livre) + o último hex válido derivado dele.
   const [corTexto, setCorTexto] = useState(COR_PADRAO);
@@ -72,9 +81,73 @@ export function ConfiguracoesForm() {
       const tt = tenantRow as Tenant;
       setTenant(tt);
       setCorTexto(tt.cor_primaria || COR_PADRAO);
+      setLogoUrl(tt.logo_url ?? null);
     }
     setCarregando(false);
   }, [supabase]);
+
+  /**
+   * Faz upload da imagem para o bucket "logos" e persiste a URL pública na
+   * coluna tenants.logo_url — mesmo fluxo do painel admin.
+   */
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setErro(null);
+    setLogoSalvo(false);
+
+    if (!file.type.startsWith("image/")) {
+      setErro(dict.cfg.erroLogoImagem);
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setErro(dict.cfg.erroLogoTamanho);
+      e.target.value = "";
+      return;
+    }
+    if (!tenantId) {
+      setErro(dict.orc.erroTenant);
+      return;
+    }
+
+    setEnviandoLogo(true);
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+    const path = `${tenantId}/${crypto.randomUUID()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET_LOGOS)
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (upErr) {
+      console.error("[ConfiguracoesForm] erro no upload do logo:", upErr);
+      setErro(dict.cfg.erroLogoUpload);
+      setEnviandoLogo(false);
+      return;
+    }
+
+    const { data } = supabase.storage.from(BUCKET_LOGOS).getPublicUrl(path);
+    const publicUrl = data.publicUrl;
+
+    const { error: dbErr } = await supabase
+      .from("tenants")
+      .update({ logo_url: publicUrl })
+      .eq("id", tenantId);
+
+    if (dbErr) {
+      console.error("[ConfiguracoesForm] erro ao salvar logo_url:", dbErr);
+      setErro(dict.cfg.erroLogoUpload);
+      setEnviandoLogo(false);
+      return;
+    }
+
+    setLogoUrl(publicUrl);
+    setLogoSalvo(true);
+    setEnviandoLogo(false);
+    e.target.value = "";
+  }
 
   useEffect(() => {
     carregarContexto();
@@ -153,6 +226,72 @@ export function ConfiguracoesForm() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Logo da empresa */}
+      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {dict.cfg.logoMarca}
+          </h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {dict.cfg.logoDesc}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Preview da imagem selecionada */}
+          <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={dict.cfg.logoMarca}
+                className="size-full object-contain"
+              />
+            ) : (
+              <ImageOff className="size-6 text-gray-300 dark:text-gray-600" />
+            )}
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={enviandoLogo}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+              {enviandoLogo ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : logoSalvo ? (
+                <Check className="size-4 text-green-600 dark:text-green-400" />
+              ) : (
+                <Upload className="size-4" />
+              )}
+              {enviandoLogo
+                ? dict.cfg.logoEnviando
+                : logoSalvo
+                ? dict.cfg.logoSalvo
+                : dict.cfg.logoEnviar}
+            </button>
+            <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+              {dict.cfg.logoFormato}
+            </p>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            className="hidden"
+            onChange={handleLogoUpload}
+          />
+        </div>
+
+        {/* Mensagem de ajuda / oferta de criação gratuita */}
+        <p className="rounded-lg bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+          {dict.cfg.logoAjuda}
+        </p>
       </section>
 
       {/* Seletor de cor */}
