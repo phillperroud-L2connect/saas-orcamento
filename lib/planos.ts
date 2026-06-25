@@ -24,7 +24,7 @@ export const PLANOS: Record<PlanoId, Plano> = {
   basico: {
     id: "basico",
     nome: "Básico",
-    preco: 14999,
+    preco: 11980,
     moeda: "ARS",
     descricao: "Para profissionais que estão começando a organizar seus orçamentos.",
     recursos: [
@@ -37,7 +37,7 @@ export const PLANOS: Record<PlanoId, Plano> = {
   pro: {
     id: "pro",
     nome: "Pro",
-    preco: 24999,
+    preco: 19850,
     moeda: "ARS",
     descricao: "Para quem precisa de mais controle, marca e relatórios.",
     destaque: true,
