@@ -1,27 +1,35 @@
 import Link from "next/link";
 import { Plus, Building2 } from "lucide-react";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { TenantRow } from "@/components/admin/tenant-row";
 import type { Tenant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const PAIS_LABEL: Record<string, string> = { BR: "🇧🇷 Brasil", AR: "🇦🇷 Argentina" };
-
 export default async function AdminPage() {
   const supabase = createServerSupabase();
-  const { data, error } = await supabase
-    .from("tenants")
-    .select("*")
-    .order("created_at", { ascending: false });
+
+  // Tenants + histórico de pagamentos (assinaturas) para contar por tenant.
+  const [{ data, error }, { data: assinaturas }] = await Promise.all([
+    supabase.from("tenants").select("*").order("created_at", { ascending: false }),
+    supabase.from("assinaturas").select("tenant_id"),
+  ]);
 
   const tenants = (data ?? []) as Tenant[];
+
+  // Mapa tenant_id -> nº de pagamentos no histórico.
+  const pagamentosPorTenant = new Map<string, number>();
+  for (const a of assinaturas ?? []) {
+    const id = (a as { tenant_id: string | null }).tenant_id;
+    if (id) pagamentosPorTenant.set(id, (pagamentosPorTenant.get(id) ?? 0) + 1);
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">
-            Tenants
+            Assinantes
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             {tenants.length} empresa{tenants.length === 1 ? "" : "s"} cadastrada
@@ -39,8 +47,9 @@ export default async function AdminPage() {
 
       {error && (
         <p className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-          Erro ao carregar tenants: {error.message}. Verifique se a migração{" "}
-          <code className="font-mono">supabase-admin.sql</code> foi aplicada.
+          Erro ao carregar tenants: {error.message}. Verifique se as migrações{" "}
+          <code className="font-mono">supabase-admin.sql</code> e{" "}
+          <code className="font-mono">supabase-tenant-ativo.sql</code> foram aplicadas.
         </p>
       )}
 
@@ -61,81 +70,26 @@ export default async function AdminPage() {
       )}
 
       {tenants.length > 0 && (
-        <div className="mt-8 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="mt-8 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
                 <th className="px-5 py-3 font-medium">Empresa</th>
-                <th className="px-5 py-3 font-medium">Profissional</th>
-                <th className="px-5 py-3 font-medium">País</th>
+                <th className="px-5 py-3 font-medium">Plano</th>
                 <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3" />
+                <th className="px-5 py-3 font-medium">Vencimento</th>
+                <th className="px-5 py-3 font-medium">Pagamento</th>
+                <th className="px-5 py-3 font-medium">Acesso</th>
+                <th className="px-5 py-3 text-right font-medium">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {tenants.map((t) => (
-                <tr key={t.id} className="transition hover:bg-gray-50/70">
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg text-xs font-bold text-white"
-                        style={{ background: t.cor_primaria || "#0F0F0F" }}
-                      >
-                        {t.logo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={t.logo_url}
-                            alt=""
-                            className="size-full object-cover"
-                          />
-                        ) : (
-                          t.nome_empresa.slice(0, 2).toUpperCase()
-                        )}
-                      </span>
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          {t.nome_empresa}
-                        </div>
-                        <div className="text-xs text-gray-400">{t.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-gray-600">
-                    {t.nome_profissional || "—"}
-                  </td>
-                  <td className="px-5 py-3.5 text-gray-600">
-                    {PAIS_LABEL[t.pais] ?? t.pais}
-                    {t.pais === "AR" && t.moeda_preferida && (
-                      <span className="ml-1 text-xs text-gray-400">
-                        ({t.moeda_preferida})
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                        t.ativo
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      <span
-                        className={`size-1.5 rounded-full ${
-                          t.ativo ? "bg-emerald-500" : "bg-gray-400"
-                        }`}
-                      />
-                      {t.ativo ? "Ativo" : "Inativo"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <Link
-                      href={`/admin/tenants/${t.id}`}
-                      className="text-sm font-medium text-gray-500 transition hover:text-gray-900"
-                    >
-                      Editar
-                    </Link>
-                  </td>
-                </tr>
+                <TenantRow
+                  key={t.id}
+                  tenant={t}
+                  pagamentos={pagamentosPorTenant.get(t.id) ?? 0}
+                />
               ))}
             </tbody>
           </table>

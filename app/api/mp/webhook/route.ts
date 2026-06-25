@@ -51,6 +51,7 @@ export async function POST(req: Request) {
 
     const meta = (payment.metadata ?? {}) as Record<string, unknown>;
     const plano = getPlano(String(meta.plano ?? ""));
+    const periodo = String(meta.periodo ?? "mensal") === "anual" ? "anual" : "mensal";
     const nome = String(meta.nome ?? payment.payer?.first_name ?? "").trim();
     const email = String(meta.email ?? payment.payer?.email ?? "")
       .trim()
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
       whatsapp,
       valor: payment.transaction_amount ?? plano.preco,
       status: payment.status,
+      forma_pagamento: "mercado_pago",
     });
 
     if (insertErr) {
@@ -91,6 +93,7 @@ export async function POST(req: Request) {
       nome: nome || email,
       email,
       plano,
+      periodo,
     });
 
     if (tenantId) {
@@ -114,7 +117,12 @@ export async function POST(req: Request) {
   }
 }
 
-type ProvisionarParams = { nome: string; email: string; plano: Plano };
+type ProvisionarParams = {
+  nome: string;
+  email: string;
+  plano: Plano;
+  periodo: "mensal" | "anual";
+};
 
 /**
  * Cria o usuário no Supabase Auth (o trigger cria tenant + users) e devolve o
@@ -123,7 +131,7 @@ type ProvisionarParams = { nome: string; email: string; plano: Plano };
  */
 async function provisionarAcesso(
   supabase: ReturnType<typeof createServiceSupabase>,
-  { nome, email, plano }: ProvisionarParams,
+  { nome, email, plano, periodo }: ProvisionarParams,
 ): Promise<{ tenantId: string | null; linkAcesso: string }> {
   const siteUrl = getSiteUrl();
   const loginUrl = `${siteUrl}/login`;
@@ -160,8 +168,13 @@ async function provisionarAcesso(
     tenantId = userRow?.tenant_id ?? null;
   }
 
-  // Ajusta região (Argentina) e registra o plano contratado.
+  // Ajusta região (Argentina), registra o plano e a assinatura como paga.
   if (tenantId) {
+    // Vencimento conforme o período pago: +1 mês ou +1 ano.
+    const venc = new Date();
+    if (periodo === "anual") venc.setFullYear(venc.getFullYear() + 1);
+    else venc.setMonth(venc.getMonth() + 1);
+
     await supabase
       .from("tenants")
       .update({
@@ -170,6 +183,9 @@ async function provisionarAcesso(
         moeda_preferida: "ARS",
         plano: plano.id,
         ativo: true,
+        status_assinatura: "pago",
+        forma_pagamento: "mercado_pago",
+        vencimento: venc.toISOString().slice(0, 10),
       })
       .eq("id", tenantId);
   }

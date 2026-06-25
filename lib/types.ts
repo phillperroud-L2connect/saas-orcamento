@@ -18,6 +18,13 @@ export type Pais = "BR" | "AR";
 export type Idioma = "pt" | "es";
 export type MoedaPreferida = "BRL" | "ARS" | "USD";
 
+/** Plano contratado pelo tenant ("manual" = pagamento fora do Mercado Pago). */
+export type PlanoContratado = "basico" | "pro" | "manual";
+/** Status de pagamento da assinatura (badge colorido no admin). */
+export type StatusAssinatura = "pago" | "pendente" | "inadimplente";
+/** Como o cliente paga a assinatura. */
+export type FormaPagamento = "mercado_pago" | "transferencia" | "dinheiro";
+
 export type Tenant = {
   id: string;
   nome_empresa: string;
@@ -30,6 +37,28 @@ export type Tenant = {
   idioma: Idioma;
   moeda_preferida: MoedaPreferida | null;
   ativo: boolean;
+  // Controle de assinatura (ver supabase-tenant-ativo.sql).
+  plano: PlanoContratado | null;
+  status_assinatura: StatusAssinatura;
+  forma_pagamento: FormaPagamento | null;
+  vencimento: string | null;
+  created_at: string;
+};
+
+/** Registro de pagamento (histórico) — tabela public.assinaturas. */
+export type Assinatura = {
+  id: string;
+  mp_payment_id: string;
+  mp_preference_id: string | null;
+  external_reference: string | null;
+  plano: PlanoContratado;
+  nome: string | null;
+  email: string;
+  whatsapp: string | null;
+  valor: number | null;
+  status: string;
+  forma_pagamento: FormaPagamento | string;
+  tenant_id: string | null;
   created_at: string;
 };
 
