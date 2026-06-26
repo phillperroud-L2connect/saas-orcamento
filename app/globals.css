@@ -5,6 +5,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Informa ao navegador o esquema de cores ativo para que controles nativos
+     (dropdown de <select>, date pickers, scrollbars, autofill) sigam o tema. */
+  color-scheme: light;
 }
 
 /* Tema escuro controlado pela classe .dark no <html> (toggle do dashboard),
@@ -12,6 +15,7 @@
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  color-scheme: dark;
 }
 
 body {

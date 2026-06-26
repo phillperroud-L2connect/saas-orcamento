@@ -299,7 +299,7 @@ export default async function FinanceiroPage() {
                     return (
                       <tr
                         key={o.id}
-                        className="border-t border-gray-50 transition hover:bg-gray-50/60"
+                        className="border-t border-gray-50 transition hover:bg-gray-50/60 dark:border-gray-800 dark:hover:bg-gray-800/60"
                       >
                         <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
                           {o.numero ?? "—"}
