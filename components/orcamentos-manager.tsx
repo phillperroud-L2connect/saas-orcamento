@@ -223,6 +223,9 @@ export function OrcamentosManager() {
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [numero, setNumero] = useState("");
+  // Link público de pagamento + QR (gerados após salvar, p/ aparecer no PDF).
+  const [linkPagamento, setLinkPagamento] = useState<string | null>(null);
+  const [qrPagamento, setQrPagamento] = useState<string | null>(null);
   // Data fixada na montagem; o rótulo é formatado conforme o idioma do tenant.
   const [hoje] = useState(() => new Date());
   const dataHoje = fmtDataLocal(hoje);
@@ -651,6 +654,16 @@ export function OrcamentosManager() {
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, imgWidth, imgHeight);
+
+      // Link clicável real (o box rasterizado não é clicável no PDF). Posiciona
+      // logo abaixo do conteúdo quando cabe na página, com fallback no rodapé.
+      if (linkPagamento) {
+        const linkY = Math.min(imgHeight + 6, 291);
+        pdf.setFontSize(9);
+        pdf.setTextColor(0, 102, 204);
+        pdf.textWithLink(`→ ${linkPagamento}`, 12, linkY, { url: linkPagamento });
+      }
+
       pdf.save(`orcamento-${form.cliente_nome || "cliente"}-${numero}.pdf`);
     } catch (e) {
       console.error(e);
@@ -659,7 +672,25 @@ export function OrcamentosManager() {
   }
 
   async function salvarEGerar() {
-    await salvarOrcamento();
+    const id = await salvarOrcamento();
+
+    // Se o orçamento foi salvo e o prestador tem Mercado Pago conectado, gera o
+    // link público de pagamento + QR code e aguarda o DOM refletir antes do PDF.
+    if (id && tenant?.mp_access_token) {
+      const site = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+      const link = `${site}/pagar/${id}`;
+      let qr: string | null = null;
+      try {
+        const QR = await import("qrcode");
+        qr = await QR.toDataURL(link, { width: 240, margin: 1 });
+      } catch (e) {
+        console.error("[orcamentos] erro ao gerar QR:", e);
+      }
+      setLinkPagamento(link);
+      setQrPagamento(qr);
+      await new Promise((r) => setTimeout(r, 80));
+    }
+
     await gerarPDF();
   }
 
@@ -675,6 +706,8 @@ export function OrcamentosManager() {
     dataHoje,
     dict,
     fmt,
+    linkPagamento,
+    qrPagamento,
   };
 
   return (

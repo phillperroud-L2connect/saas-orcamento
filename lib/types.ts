@@ -42,6 +42,12 @@ export type Tenant = {
   status_assinatura: StatusAssinatura;
   forma_pagamento: FormaPagamento | null;
   vencimento: string | null;
+  // Mercado Pago do prestador (OAuth) — ver supabase-mp-usuario.sql.
+  // Permite ao tenant receber pagamentos dos clientes finais na própria conta.
+  mp_access_token: string | null;
+  mp_user_id: string | null;
+  mp_refresh_token: string | null;
+  mp_email: string | null;
   created_at: string;
 };
 

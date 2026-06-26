@@ -11,6 +11,8 @@ const ROTAS_PUBLICAS = [
   "/admin/login",
   "/checkout",
   "/api/mp",
+  // Página pública de pagamento do orçamento (cliente final, sem conta).
+  "/pagar",
 ];
 
 export async function middleware(request: NextRequest) {

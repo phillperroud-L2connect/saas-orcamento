@@ -1,10 +1,50 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Save, Upload, Loader2, ImageOff } from "lucide-react";
+import {
+  Check,
+  Save,
+  Upload,
+  Loader2,
+  ImageOff,
+  CreditCard,
+  Link2,
+  Link2Off,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
 import type { Tenant } from "@/lib/types";
+
+/**
+ * Rótulos da seção "Receber pagamentos" (inline pt/es — sem depender do
+ * dicionário global, já que é uma seção nova).
+ */
+const TEXTOS_MP = {
+  pt: {
+    titulo: "Receber pagamentos",
+    desc: "Conecte sua conta do Mercado Pago para receber os pagamentos dos seus clientes direto na sua conta, pelo link do orçamento.",
+    conectar: "Conectar Mercado Pago",
+    conectando: "Redirecionando...",
+    conectado: "Mercado Pago conectado",
+    desconectar: "Desconectar",
+    desconectando: "Desconectando...",
+    sucesso: "Conta do Mercado Pago conectada com sucesso!",
+    falha: "Não foi possível conectar o Mercado Pago. Tente novamente.",
+    semConta: "Nenhuma conta conectada.",
+  },
+  es: {
+    titulo: "Recibir pagos",
+    desc: "Conectá tu cuenta de Mercado Pago para recibir los pagos de tus clientes directo en tu cuenta, desde el enlace del presupuesto.",
+    conectar: "Conectar Mercado Pago",
+    conectando: "Redirigiendo...",
+    conectado: "Mercado Pago conectado",
+    desconectar: "Desconectar",
+    desconectando: "Desconectando...",
+    sucesso: "¡Cuenta de Mercado Pago conectada con éxito!",
+    falha: "No se pudo conectar Mercado Pago. Intentá de nuevo.",
+    semConta: "Ninguna cuenta conectada.",
+  },
+} as const;
 
 /** Bucket de armazenamento dos logos (mesmo usado no painel admin). */
 const BUCKET_LOGOS = "logos";
@@ -30,8 +70,15 @@ function normalizarHex(valor: string): string | null {
 
 export function ConfiguracoesForm() {
   const supabase = createClient();
-  const { dict, fmt, moeda, simbolo } = useI18n();
+  const { dict, fmt, moeda, simbolo, idioma } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const txtMp = TEXTOS_MP[idioma] ?? TEXTOS_MP.pt;
+
+  // ── Conexão Mercado Pago do prestador ──
+  const [conectandoMp, setConectandoMp] = useState(false);
+  const [desconectandoMp, setDesconectandoMp] = useState(false);
+  // Resultado do retorno OAuth lido da URL (?mp=ok|erro).
+  const [mpRetorno, setMpRetorno] = useState<"ok" | "erro" | null>(null);
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -181,6 +228,83 @@ export function ConfiguracoesForm() {
     setSalvo(true);
   }
 
+  // Lê o resultado do retorno OAuth (?mp=ok|erro) e limpa a URL.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const mp = params.get("mp");
+    if (mp === "ok" || mp === "erro") {
+      setMpRetorno(mp);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("mp");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
+  /**
+   * Inicia o OAuth do Mercado Pago: redireciona o navegador para a tela de
+   * autorização do MP. O `state` leva o tenant_id para correlacionar o retorno.
+   * O redirect_uri é esta própria página (ver getMpRedirectUri no servidor).
+   */
+  function conectarMercadoPago() {
+    if (!tenantId) {
+      setErro(dict.orc.erroTenant);
+      return;
+    }
+    const clientId = process.env.NEXT_PUBLIC_MP_CLIENT_ID;
+    if (!clientId) {
+      setErro("NEXT_PUBLIC_MP_CLIENT_ID não configurado.");
+      return;
+    }
+    const site = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+    const redirectUri = `${site}/dashboard/configuracoes`;
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: "code",
+      platform_id: "mp",
+      state: tenantId,
+      redirect_uri: redirectUri,
+    });
+    setConectandoMp(true);
+    window.location.href = `https://auth.mercadopago.com.ar/authorization?${params.toString()}`;
+  }
+
+  /** Desconecta a conta MP do prestador: limpa as colunas mp_* do tenant. */
+  async function desconectarMercadoPago() {
+    if (!tenantId) return;
+    setDesconectandoMp(true);
+    setErro(null);
+    const { error } = await supabase
+      .from("tenants")
+      .update({
+        mp_access_token: null,
+        mp_user_id: null,
+        mp_refresh_token: null,
+        mp_email: null,
+      })
+      .eq("id", tenantId);
+    setDesconectandoMp(false);
+    if (error) {
+      console.error("[ConfiguracoesForm] erro ao desconectar MP:", error);
+      setErro(txtMp.falha);
+      return;
+    }
+    setMpRetorno(null);
+    setTenant((t) =>
+      t
+        ? {
+            ...t,
+            mp_access_token: null,
+            mp_user_id: null,
+            mp_refresh_token: null,
+            mp_email: null,
+          }
+        : t,
+    );
+  }
+
+  const mpConectado = Boolean(tenant?.mp_access_token);
+
   if (carregando) {
     return (
       <p className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -292,6 +416,75 @@ export function ConfiguracoesForm() {
         <p className="rounded-lg bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           {dict.cfg.logoAjuda}
         </p>
+      </section>
+
+      {/* Receber pagamentos — Mercado Pago do prestador */}
+      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+            <CreditCard className="size-4 text-[#009ee3]" />
+            {txtMp.titulo}
+          </h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {txtMp.desc}
+          </p>
+        </div>
+
+        {mpRetorno === "ok" && (
+          <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700 dark:bg-green-950/40 dark:text-green-300">
+            {txtMp.sucesso}
+          </p>
+        )}
+        {mpRetorno === "erro" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+            {txtMp.falha}
+          </p>
+        )}
+
+        {mpConectado ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50/60 px-4 py-3 dark:border-green-900 dark:bg-green-950/30">
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#009ee3]/10 text-[#009ee3]">
+                <Check className="size-4" />
+              </span>
+              <div>
+                <div className="text-sm font-medium text-green-800 dark:text-green-300">
+                  {txtMp.conectado}
+                </div>
+                <div className="text-xs text-green-700/80 dark:text-green-400/80">
+                  {tenant?.mp_email || txtMp.semConta}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={desconectarMercadoPago}
+              disabled={desconectandoMp}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+              {desconectandoMp ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Link2Off className="size-4" />
+              )}
+              {desconectandoMp ? txtMp.desconectando : txtMp.desconectar}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={conectarMercadoPago}
+            disabled={conectandoMp}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#009ee3] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#008fcc] disabled:opacity-60"
+          >
+            {conectandoMp ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Link2 className="size-4" />
+            )}
+            {conectandoMp ? txtMp.conectando : txtMp.conectar}
+          </button>
+        )}
       </section>
 
       {/* Seletor de cor */}

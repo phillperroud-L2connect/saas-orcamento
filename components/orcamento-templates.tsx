@@ -29,7 +29,121 @@ export type TemplateProps = {
   dataHoje: string;
   dict: Dict;
   fmt: (v: number) => string;
+  /** Link público de pagamento (/pagar/[id]) — definido após salvar. */
+  linkPagamento?: string | null;
+  /** QR code do link de pagamento como data URL (PNG). */
+  qrPagamento?: string | null;
 };
+
+/** Rótulos do box "Pagar online" (inline pt/es). */
+const PAGAR_LABELS = {
+  pt: {
+    titulo: "Pague online",
+    clique: "Clique aqui para pagar",
+    qr: "Ou aponte a câmera para o QR Code",
+  },
+  es: {
+    titulo: "Pagá online",
+    clique: "Hacé clic aquí para pagar",
+    qr: "O escaneá el QR con tu cámara",
+  },
+} as const;
+
+/**
+ * Box "Pagar online" com link clicável + QR code (visível no PDF/desktop).
+ * Só aparece quando há um link de pagamento (orçamento já salvo e prestador
+ * com Mercado Pago conectado).
+ */
+function BoxPagarOnline({
+  link,
+  qr,
+  cor,
+  corSuave,
+  idioma,
+}: {
+  link?: string | null;
+  qr?: string | null;
+  cor: string;
+  corSuave: string;
+  idioma: "pt" | "es";
+}) {
+  if (!link) return null;
+  const t = PAGAR_LABELS[idioma] ?? PAGAR_LABELS.pt;
+  return (
+    <div
+      style={{
+        marginBottom: "24px",
+        display: "flex",
+        alignItems: "center",
+        gap: "16px",
+        background: corSuave,
+        border: `1px solid ${cor}`,
+        borderRadius: "12px",
+        padding: "16px 18px",
+      }}
+    >
+      <div style={{ flex: 1 }}>
+        <div
+          style={{
+            fontWeight: 800,
+            color: cor,
+            fontSize: "13px",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            marginBottom: "6px",
+          }}
+        >
+          {t.titulo}
+        </div>
+        <a
+          href={link}
+          style={{
+            display: "inline-block",
+            background: cor,
+            color: "#fff",
+            textDecoration: "none",
+            padding: "9px 16px",
+            borderRadius: "8px",
+            fontWeight: 700,
+            fontSize: "13px",
+          }}
+        >
+          {t.clique}
+        </a>
+        <div
+          style={{
+            marginTop: "8px",
+            fontSize: "10px",
+            color: "#666",
+            wordBreak: "break-all",
+          }}
+        >
+          {link}
+        </div>
+        {qr ? (
+          <div style={{ marginTop: "4px", fontSize: "11px", color: "#666" }}>
+            {t.qr}
+          </div>
+        ) : null}
+      </div>
+      {qr ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={qr}
+          alt="QR Code"
+          style={{
+            width: "92px",
+            height: "92px",
+            borderRadius: "8px",
+            background: "#fff",
+            padding: "4px",
+            border: "1px solid #e5e7eb",
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 /* ===========================================================================
  * 1) CLÁSSICO — layout formal original
@@ -45,7 +159,10 @@ export function TemplateClassico({
   dataHoje,
   dict,
   fmt,
+  linkPagamento,
+  qrPagamento,
 }: TemplateProps) {
+  const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
   return (
     <div style={{ padding: "40px", fontSize: "13px", lineHeight: 1.5 }}>
       {/* Header */}
@@ -371,6 +488,15 @@ export function TemplateClassico({
         </div>
       </div>
 
+      {/* Pagar online (link + QR) */}
+      <BoxPagarOnline
+        link={linkPagamento}
+        qr={qrPagamento}
+        cor={cor}
+        corSuave={corSuave}
+        idioma={idioma}
+      />
+
       {/* Nota adicional */}
       {form.nota && (
         <div
@@ -431,7 +557,10 @@ export function TemplateModerno({
   dataHoje,
   dict,
   fmt,
+  linkPagamento,
+  qrPagamento,
 }: TemplateProps) {
+  const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
   return (
     <div style={{ fontSize: "13px", lineHeight: 1.5 }}>
       {/* Faixa de cabeçalho na cor da marca */}
@@ -745,6 +874,15 @@ export function TemplateModerno({
           )}
         </div>
 
+        {/* Pagar online (link + QR) */}
+        <BoxPagarOnline
+          link={linkPagamento}
+          qr={qrPagamento}
+          cor={cor}
+          corSuave={corSuave}
+          idioma={idioma}
+        />
+
         {/* Nota adicional */}
         {form.nota && (
           <div
@@ -806,7 +944,12 @@ export function TemplateSimples({
   dataHoje,
   dict,
   fmt,
+  cor,
+  corSuave,
+  linkPagamento,
+  qrPagamento,
 }: TemplateProps) {
+  const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
   return (
     <div
       style={{
@@ -912,6 +1055,17 @@ export function TemplateSimples({
           {form.nota}
         </div>
       )}
+
+      {/* Pagar online (link + QR) */}
+      <div style={{ marginTop: "16px" }}>
+        <BoxPagarOnline
+          link={linkPagamento}
+          qr={qrPagamento}
+          cor={cor}
+          corSuave={corSuave}
+          idioma={idioma}
+        />
+      </div>
 
       {/* Rodapé minimalista */}
       <div style={{ marginTop: "24px", fontSize: "11px", color: "#999" }}>

@@ -117,6 +117,56 @@ export async function notificarAdminNovaVenda({
   }
 }
 
+type PagamentoPrestadorParams = {
+  /** E-mail do prestador (tenant.email) que recebe a notificação. */
+  para: string;
+  nomeCliente?: string | null;
+  numero?: string | null;
+  valor: string; // já formatado na moeda do orçamento
+};
+
+/**
+ * Notifica o PRESTADOR de que um cliente pagou um orçamento dele via Mercado
+ * Pago. Best-effort (ver getResend): não lança se a chave estiver ausente.
+ */
+export async function notificarPrestadorPagamento({
+  para,
+  nomeCliente,
+  numero,
+  valor,
+}: PagamentoPrestadorParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const ref = numero ? ` ${escapeHtml(numero)}` : "";
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#171717">
+    <h2 style="font-size:19px;margin:0 0 12px">💰 Você recebeu um pagamento</h2>
+    <p style="color:#555;line-height:1.6">
+      O orçamento${ref} foi pago pelo seu cliente
+      ${nomeCliente ? `<strong>${escapeHtml(nomeCliente)}</strong>` : ""} via Mercado Pago.
+    </p>
+    <table style="font-size:14px;color:#333;border-collapse:collapse;margin-top:8px">
+      <tr><td style="padding:4px 12px 4px 0;color:#888">Valor</td><td><strong>${escapeHtml(valor)}</strong></td></tr>
+      ${numero ? `<tr><td style="padding:4px 12px 4px 0;color:#888">Orçamento</td><td>${escapeHtml(numero)}</td></tr>` : ""}
+    </table>
+    <p style="color:#999;font-size:12px;line-height:1.6;margin-top:16px">
+      O valor cai diretamente na sua conta do Mercado Pago.
+    </p>
+  </div>`;
+
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: para,
+    subject: `💰 Pagamento recebido${ref} — ${valor}`,
+    html,
+  });
+
+  if (error) {
+    console.error("[email] Falha ao notificar prestador do pagamento:", error);
+  }
+}
+
 /** Escapa caracteres perigosos para interpolação segura em HTML. */
 function escapeHtml(str: string): string {
   return str
