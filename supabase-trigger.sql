@@ -42,8 +42,10 @@ begin
   );
 
   -- 1) Cria o tenant do novo usuário com os dados básicos disponíveis.
-  insert into public.tenants (nome_empresa, nome_profissional, email)
-  values (v_nome, v_nome, new.email)
+  -- Por enquanto só aceitamos clientes argentinos: força região AR, idioma
+  -- espanhol e moeda ARS. (Quando expandirmos para o Brasil, revisar aqui.)
+  insert into public.tenants (nome_empresa, nome_profissional, email, pais, idioma, moeda_preferida)
+  values (v_nome, v_nome, new.email, 'AR', 'es', 'ARS')
   returning id into v_tenant_id;
 
   -- 2) Cria o usuário vinculado ao tenant, como administrador da conta.
