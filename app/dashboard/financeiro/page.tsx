@@ -21,7 +21,7 @@ type OrcamentoRow = {
   numero: string | null;
   titulo: string | null;
   total: number | string;
-  status: "rascunho" | "enviado" | "aprovado" | "recusado";
+  status: "rascunho" | "enviado" | "aprovado" | "recusado" | "arquivado";
   created_at: string;
   cliente_id: string | null;
   clientes: { nome: string } | null;
@@ -32,6 +32,7 @@ const STATUS_CLS: Record<OrcamentoRow["status"], string> = {
   enviado: "bg-blue-50 text-blue-700",
   aprovado: "bg-green-50 text-green-700",
   recusado: "bg-red-50 text-red-700",
+  arquivado: "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400",
 };
 
 /** Chave AAAA-MM para agrupar por mês independente de fuso. */
@@ -83,6 +84,7 @@ export default async function FinanceiroPage() {
     enviado: { label: dict.lista.status.enviado, cls: STATUS_CLS.enviado },
     aprovado: { label: dict.lista.status.aprovado, cls: STATUS_CLS.aprovado },
     recusado: { label: dict.lista.status.recusado, cls: STATUS_CLS.recusado },
+    arquivado: { label: dict.lista.status.arquivado, cls: STATUS_CLS.arquivado },
   };
 
   // Carrega os orçamentos do tenant (RLS já restringe; o filtro é redundante e explícito).
@@ -286,7 +288,10 @@ export default async function FinanceiroPage() {
                 </thead>
                 <tbody>
                   {ultimos.map((o) => {
-                    const st = STATUS_STYLE[o.status];
+                    const st = STATUS_STYLE[o.status] ?? {
+                      label: o.status ?? "—",
+                      cls: STATUS_CLS.rascunho,
+                    };
                     const cliente =
                       o.clientes?.nome ??
                       o.titulo?.replace(/^(Orçamento|Presupuesto)\s*—\s*/, "") ??
