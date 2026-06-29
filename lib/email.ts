@@ -77,6 +77,76 @@ export async function enviarBoasVindas({
   }
 }
 
+type LinkCadastroParams = {
+  /** E-mail do pagador, destinatário do link de cadastro. */
+  email: string;
+  plano: Plano;
+  /** Link tokenizado: https://.../cadastro?token=<token> */
+  linkCadastro: string;
+};
+
+/**
+ * E-mail enviado logo após o pagamento aprovado, com o link tokenizado para o
+ * cliente criar a senha e ativar a conta. Visual escuro (#0f172a) com azul
+ * (#3ea6ff), texto em espanhol. Best-effort (ver getResend).
+ */
+export async function enviarLinkCadastro({
+  email,
+  plano,
+  linkCadastro,
+}: LinkCadastroParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const html = `
+  <div style="background:#0f172a;padding:32px 16px;font-family:Arial,Helvetica,sans-serif">
+    <div style="max-width:520px;margin:0 auto;background:#0f172a">
+      <div style="border:1px solid #1e293b;border-radius:16px;padding:32px;background:#111c33">
+        <h1 style="font-size:22px;margin:0 0 8px;color:#f8fafc;font-weight:700">
+          ¡Pago confirmado! 🎉
+        </h1>
+        <p style="color:#cbd5e1;line-height:1.6;font-size:15px;margin:0 0 4px">
+          Recibimos tu pago del plan
+          <strong style="color:#3ea6ff">${escapeHtml(plano.nome)}</strong>.
+        </p>
+        <p style="color:#cbd5e1;line-height:1.6;font-size:15px;margin:0 0 24px">
+          Solo falta un paso: creá tu contraseña para activar tu cuenta y
+          empezar a generar presupuestos.
+        </p>
+        <p style="margin:0 0 24px">
+          <a href="${linkCadastro}"
+             style="background:#3ea6ff;color:#0f172a;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block">
+            Crear mi contraseña
+          </a>
+        </p>
+        <p style="color:#f59e0b;font-size:13px;line-height:1.6;margin:0 0 20px">
+          ⏳ Este enlace expira en 24 horas.
+        </p>
+        <p style="color:#64748b;font-size:12px;line-height:1.6;margin:0 0 24px">
+          Si el botón no funciona, copiá y pegá este enlace en tu navegador:<br>
+          <span style="color:#3ea6ff;word-break:break-all">${linkCadastro}</span>
+        </p>
+        <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0">
+        <p style="color:#94a3b8;font-size:13px;line-height:1.6;margin:0">
+          Equipo L2connect<br>
+          <a href="mailto:philip@l2connect.com.br" style="color:#3ea6ff;text-decoration:none">philip@l2connect.com.br</a>
+        </p>
+      </div>
+    </div>
+  </div>`;
+
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: email,
+    subject: "Activá tu cuenta — Generador de Presupuestos",
+    html,
+  });
+
+  if (error) {
+    console.error("[email] Falha ao enviar link de cadastro:", error);
+  }
+}
+
 type NotificacaoAdminParams = {
   nome: string;
   email: string;
