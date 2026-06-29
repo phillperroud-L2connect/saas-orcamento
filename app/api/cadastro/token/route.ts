@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { getPlano } from "@/lib/planos";
+import { rateLimit, getClientIp, tooManyRequests } from "@/lib/rate-limit";
 
 /**
  * /api/cadastro/token
@@ -68,6 +69,11 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // Rate limit: cria conta no Auth — protege contra abuso/força bruta de token.
+  // 10 tentativas por IP a cada 5 min.
+  const rl = rateLimit(`cadastro:${getClientIp(req)}`, 10, 5 * 60 * 1000);
+  if (!rl.ok) return tooManyRequests(rl.retryAfter);
+
   let body: { token?: string; senha?: string } = {};
   try {
     body = await req.json();

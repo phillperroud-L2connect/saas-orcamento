@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Preference } from "mercadopago";
 import { getMercadoPagoClientFor, getSiteUrl } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
+import { rateLimit, getClientIp, tooManyRequests } from "@/lib/rate-limit";
 
 /**
  * POST /api/mp/pagar-orcamento
@@ -15,6 +16,11 @@ import { createServiceSupabase } from "@/lib/supabase-service";
  * públicas de pagamento).
  */
 export async function POST(req: Request) {
+  // Rate limit: cria preferência de pagamento no MP — limita abuso por IP.
+  // 20 requisições por IP a cada 1 min.
+  const rl = rateLimit(`pagar:${getClientIp(req)}`, 20, 60 * 1000);
+  if (!rl.ok) return tooManyRequests(rl.retryAfter);
+
   let body: { orcamentoId?: string };
   try {
     body = await req.json();
