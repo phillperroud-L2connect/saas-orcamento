@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { Payment } from "mercadopago";
-import { getMercadoPagoClient, getSiteUrl } from "@/lib/mercadopago";
+import {
+  getMercadoPagoClient,
+  getSiteUrl,
+  verificarAssinaturaMpWebhook,
+} from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { getPlano } from "@/lib/planos";
 import { enviarLinkCadastro, notificarAdminNovaVenda } from "@/lib/email";
+import {
+  aplicarRateLimit,
+  limiterWebhook,
+  getClientIp,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 /**
  * POST /api/mp/webhook
@@ -22,6 +32,10 @@ import { enviarLinkCadastro, notificarAdminNovaVenda } from "@/lib/email";
  * do MP). Só responde 500 em falhas transitórias, para o MP tentar de novo.
  */
 export async function POST(req: Request) {
+  // Rate limit por IP (rajadas legítimas do MP cabem no limite generoso).
+  const rl = await aplicarRateLimit(limiterWebhook, `webhook:${getClientIp(req)}`);
+  if (!rl.ok) return tooManyRequests(rl.retryAfter);
+
   const { searchParams } = new URL(req.url);
 
   // O MP envia o tipo em `type` (webhooks novos) ou `topic` (IPN antigo),
@@ -36,6 +50,14 @@ export async function POST(req: Request) {
   const tipo = searchParams.get("type") ?? searchParams.get("topic") ?? bodyJson.type;
   const paymentId =
     searchParams.get("data.id") ?? searchParams.get("id") ?? bodyJson.data?.id;
+
+  // Autenticidade: rejeita qualquer requisição que não venha do Mercado Pago
+  // (assinatura x-signature inválida/ausente ou secret não configurada).
+  const assinatura = verificarAssinaturaMpWebhook(req, paymentId ?? null);
+  if (!assinatura.ok) {
+    console.warn("[mp/webhook] assinatura rejeitada:", assinatura.motivo);
+    return NextResponse.json({ erro: "assinatura_invalida" }, { status: 401 });
+  }
 
   // Só nos interessa o tópico de pagamento.
   if (tipo !== "payment" || !paymentId) {

@@ -11,6 +11,8 @@ const ROTAS_PUBLICAS = [
   "/admin/login",
   "/checkout",
   "/api/mp",
+  // Login server-side (rate-limited) — chamado por quem ainda não tem sessão.
+  "/api/auth",
   // Validação/criação de conta por token (onboarding pós-pagamento), sem sessão.
   "/api/cadastro",
   // Página pública de pagamento do orçamento (cliente final, sem conta).

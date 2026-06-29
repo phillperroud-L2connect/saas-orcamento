@@ -1,4 +1,64 @@
 import { MercadoPagoConfig } from "mercadopago";
+import crypto from "node:crypto";
+
+/* ===========================================================================
+ * Validação da assinatura do webhook (x-signature)
+ * ======================================================================== */
+
+export type ResultadoAssinatura = { ok: boolean; motivo?: string };
+
+/**
+ * Verifica a autenticidade de uma notificação do Mercado Pago.
+ *
+ * O MP assina cada webhook e envia no header `x-signature` o par `ts` e `v1`:
+ *     x-signature: ts=1700000000,v1=<hmac-sha256-hex>
+ * mais o header `x-request-id`. O valor `v1` é o HMAC-SHA256 do "manifest"
+ *     id:<data.id>;request-id:<x-request-id>;ts:<ts>;
+ * usando como chave a SECRET do webhook (Mercado Pago → Suas integrações →
+ * (sua app) → Webhooks → "Assinatura secreta"), em MP_WEBHOOK_SECRET.
+ *
+ * Fail-closed: sem secret configurada ou sem assinatura válida → { ok: false }.
+ * (A rota responde 401.) Comparação timing-safe contra timing attacks.
+ *
+ * @param req     Requisição recebida (lê os headers x-signature / x-request-id).
+ * @param dataId  O `data.id` do recurso (vem da query `data.id`/`id` ou do corpo).
+ */
+export function verificarAssinaturaMpWebhook(
+  req: Request,
+  dataId: string | null,
+): ResultadoAssinatura {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) return { ok: false, motivo: "secret_ausente" };
+
+  const xSignature = req.headers.get("x-signature");
+  const xRequestId = req.headers.get("x-request-id") ?? "";
+  if (!xSignature) return { ok: false, motivo: "assinatura_ausente" };
+
+  // x-signature = "ts=...,v1=..."
+  let ts: string | undefined;
+  let v1: string | undefined;
+  for (const parte of xSignature.split(",")) {
+    const [chave, valor] = parte.split("=").map((s) => s?.trim());
+    if (chave === "ts") ts = valor;
+    else if (chave === "v1") v1 = valor;
+  }
+  if (!ts || !v1) return { ok: false, motivo: "assinatura_malformada" };
+
+  // Regra do MP: se data.id for alfanumérico, normaliza para minúsculas.
+  const id = (dataId ?? "").toLowerCase();
+
+  const manifest = `id:${id};request-id:${xRequestId};ts:${ts};`;
+  const esperado = crypto
+    .createHmac("sha256", secret)
+    .update(manifest)
+    .digest("hex");
+
+  const a = Buffer.from(esperado, "utf8");
+  const b = Buffer.from(v1, "utf8");
+  const valido = a.length === b.length && crypto.timingSafeEqual(a, b);
+
+  return valido ? { ok: true } : { ok: false, motivo: "assinatura_invalida" };
+}
 
 /**
  * Configuração do SDK do Mercado Pago (conta da Argentina).

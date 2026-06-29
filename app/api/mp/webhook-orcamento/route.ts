@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
 import { Payment } from "mercadopago";
-import { getMercadoPagoClientFor } from "@/lib/mercadopago";
+import {
+  getMercadoPagoClientFor,
+  verificarAssinaturaMpWebhook,
+} from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { notificarPrestadorPagamento } from "@/lib/email";
 import { fmtMoeda } from "@/lib/moeda";
 import type { MoedaPreferida } from "@/lib/types";
+import {
+  aplicarRateLimit,
+  limiterWebhook,
+  getClientIp,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 /**
  * POST /api/mp/webhook-orcamento?tenant=...&orcamento=...
@@ -22,6 +31,10 @@ import type { MoedaPreferida } from "@/lib/types";
  * Sempre responde 200 para eventos tratados/ignorados (evita reenvios do MP).
  */
 export async function POST(req: Request) {
+  // Rate limit por IP (mesmo limite generoso do webhook de assinaturas).
+  const rl = await aplicarRateLimit(limiterWebhook, `webhook-orc:${getClientIp(req)}`);
+  if (!rl.ok) return tooManyRequests(rl.retryAfter);
+
   const { searchParams } = new URL(req.url);
 
   let bodyJson: { type?: string; data?: { id?: string } } = {};
@@ -36,6 +49,13 @@ export async function POST(req: Request) {
     searchParams.get("data.id") ?? searchParams.get("id") ?? bodyJson.data?.id;
   const tenantId = searchParams.get("tenant");
   const orcamentoQuery = searchParams.get("orcamento");
+
+  // Autenticidade: rejeita requisições sem assinatura válida do Mercado Pago.
+  const assinatura = verificarAssinaturaMpWebhook(req, paymentId ?? null);
+  if (!assinatura.ok) {
+    console.warn("[mp/webhook-orcamento] assinatura rejeitada:", assinatura.motivo);
+    return NextResponse.json({ erro: "assinatura_invalida" }, { status: 401 });
+  }
 
   if (tipo !== "payment" || !paymentId || !tenantId) {
     return NextResponse.json({ ignorado: true }, { status: 200 });

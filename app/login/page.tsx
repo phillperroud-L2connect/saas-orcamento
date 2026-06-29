@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,14 +16,19 @@ export default function LoginPage() {
     setErro(null);
     setCarregando(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: senha,
+    // Autenticação via rota server-side (com rate limiting anti força-bruta).
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, senha }),
     });
 
-    if (error) {
-      setErro("E-mail ou senha inválidos.");
+    if (!res.ok) {
+      setErro(
+        res.status === 429
+          ? "Muitas tentativas. Aguarde alguns instantes e tente novamente."
+          : "E-mail ou senha inválidos.",
+      );
       setCarregando(false);
       return;
     }
