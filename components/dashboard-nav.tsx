@@ -10,6 +10,7 @@ export function DashboardNav() {
 
   const links = [
     { href: "/dashboard/orcamentos", label: dict.nav.orcamentos },
+    { href: "/dashboard/pagamentos", label: dict.nav.pagamentos },
     { href: "/dashboard/financeiro", label: dict.nav.financeiro },
     { href: "/dashboard/servicos", label: dict.nav.servicos },
     { href: "/dashboard/configuracoes", label: dict.nav.configuracoes },
