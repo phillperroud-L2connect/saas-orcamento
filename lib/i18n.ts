@@ -154,12 +154,16 @@ const pt = {
     arquivar: "Arquivar",
     desarquivar: "Desarquivar",
     deletar: "Deletar permanentemente",
+    editar: "Editar",
+    baixarPdf: "Baixar PDF",
+    alterarStatus: "Alterar status",
     confirmDeletar: (rotulo: string) =>
       `Deletar permanentemente o orçamento "${rotulo}"?\n\nEsta ação não pode ser desfeita.`,
     erroCarregar: "Não foi possível carregar os orçamentos.",
     erroArquivar: "Não foi possível arquivar o orçamento.",
     erroDesarquivar: "Não foi possível desarquivar o orçamento.",
     erroDeletar: "Não foi possível deletar o orçamento.",
+    erroStatus: "Não foi possível alterar o status.",
     status: {
       rascunho: "Rascunho",
       enviado: "Enviado",
@@ -397,12 +401,16 @@ const es: Dict = {
     arquivar: "Archivar",
     desarquivar: "Desarchivar",
     deletar: "Eliminar permanentemente",
+    editar: "Editar",
+    baixarPdf: "Descargar PDF",
+    alterarStatus: "Cambiar estado",
     confirmDeletar: (rotulo: string) =>
       `¿Eliminar permanentemente el presupuesto "${rotulo}"?\n\nEsta acción no se puede deshacer.`,
     erroCarregar: "No se pudieron cargar los presupuestos.",
     erroArquivar: "No se pudo archivar el presupuesto.",
     erroDesarquivar: "No se pudo desarchivar el presupuesto.",
     erroDeletar: "No se pudo eliminar el presupuesto.",
+    erroStatus: "No se pudo cambiar el estado.",
     status: {
       rascunho: "Borrador",
       enviado: "Enviado",

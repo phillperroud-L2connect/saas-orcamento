@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Plus,
   Trash2,
@@ -109,12 +110,71 @@ export type PlanoPagamento =
       resumo: string;
     };
 
-function gerarNumero() {
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const seq = String(Math.floor(Math.random() * 900) + 100);
-  return `ORC-${yy}${mm}-${seq}`;
+/** Linha de orcamentos carregada do banco para edição. */
+type OrcamentoRow = {
+  id: string;
+  cliente_id: string | null;
+  numero: string | null;
+  itens: OrcamentoItem[] | null;
+  moeda: string;
+  template: string | null;
+  opcao_pagamento: string | null;
+  parcelas: number | null;
+  percentual_entrada: number | null;
+};
+
+/** Reconstrói o formulário a partir de um orçamento salvo (reabrir p/ edição). */
+function formFromOrcamento(o: OrcamentoRow, cliente: Cliente | null): FormState {
+  const servicos: ServicoItem[] = (Array.isArray(o.itens) ? o.itens : []).map(
+    (it) => ({
+      id: crypto.randomUUID(),
+      descricao: it.descricao ?? "",
+      valor: it.valor != null ? String(it.valor) : "",
+    }),
+  );
+
+  const base: FormState = {
+    ...emptyForm,
+    cliente_id: o.cliente_id ?? "",
+    cliente_nome: cliente?.nome ?? "",
+    cliente_email: cliente?.email ?? "",
+    cliente_telefone: cliente?.telefone ?? "",
+    cliente_documento: cliente?.documento ?? "",
+    cliente_endereco: cliente?.endereco ?? "",
+    servicos: servicos.length ? servicos : emptyForm.servicos,
+    template: (o.template as TipoTemplate) ?? "classico",
+  };
+
+  const pct = Number(o.percentual_entrada ?? 0);
+  const parcelas = Number(o.parcelas ?? 1);
+
+  if (o.opcao_pagamento === "entrada_restante") {
+    return {
+      ...base,
+      opcao_pagamento: "entrada_restante",
+      percentual_entrada: String(pct),
+    };
+  }
+  if (o.opcao_pagamento === "parcelado") {
+    // percentual_entrada > 0 indica que foi parcelado com entrada diferenciada.
+    if (pct > 0) {
+      return {
+        ...base,
+        opcao_pagamento: "parcelado",
+        parcelas: String(parcelas),
+        tipo_parcelamento: "entrada_diferenciada",
+        entrada_tipo: "percentual",
+        entrada_valor: String(pct),
+      };
+    }
+    return {
+      ...base,
+      opcao_pagamento: "parcelado",
+      parcelas: String(parcelas),
+      tipo_parcelamento: "iguais",
+    };
+  }
+  return { ...base, opcao_pagamento: "unico" };
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -205,8 +265,13 @@ export function OrcamentosManager() {
   const supabase = createClient();
   const previewRef = useRef<HTMLDivElement>(null);
   const { dict, fmt, simbolo, moeda, data: fmtDataLocal } = useI18n();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("id");
+  const wantPdf = searchParams.get("pdf") === "1";
 
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingAutoPdf, setPendingAutoPdf] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -285,8 +350,52 @@ export function OrcamentosManager() {
 
   useEffect(() => {
     carregarContexto();
-    setNumero(gerarNumero());
   }, [carregarContexto]);
+
+  // Edição: carrega o orçamento salvo quando há ?id= na URL e preenche o form.
+  useEffect(() => {
+    if (!editId) return;
+    let active = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("orcamentos")
+        .select("*")
+        .eq("id", editId)
+        .single();
+      if (!active || error || !data) return;
+      const o = data as unknown as OrcamentoRow;
+      let cli: Cliente | null = null;
+      if (o.cliente_id) {
+        const { data: c } = await supabase
+          .from("clientes")
+          .select("*")
+          .eq("id", o.cliente_id)
+          .single();
+        cli = (c as Cliente) ?? null;
+      }
+      if (!active) return;
+      setEditingId(o.id);
+      setNumero(o.numero ?? "");
+      setForm(formFromOrcamento(o, cli));
+      setSalvo(false);
+      if (wantPdf) setPendingAutoPdf(true);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [editId, wantPdf, supabase]);
+
+  // Regerar PDF ao abrir via ?id=&pdf=1 (botão "Baixar PDF" da lista): aguarda
+  // o tenant e o número carregarem, dá tempo do preview pintar, e rasteriza.
+  useEffect(() => {
+    if (!pendingAutoPdf || !editingId || !tenant) return;
+    const t = setTimeout(() => {
+      void gerarPDF(numero);
+      setPendingAutoPdf(false);
+    }, 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoPdf, editingId, tenant, numero]);
 
   function selecionarCliente(id: string) {
     const c = clientes.find((c) => c.id === id);
@@ -576,7 +685,9 @@ export function OrcamentosManager() {
     }
   }
 
-  async function salvarOrcamento(): Promise<string | null> {
+  async function salvarOrcamento(): Promise<
+    { id: string | null; numero: string } | null
+  > {
     if (!tenantId) {
       setErro(dict.orc.erroTenant);
       return null;
@@ -591,34 +702,57 @@ export function OrcamentosManager() {
         valor: parseFloat(s.valor) || 0,
       }));
 
+    const percentualEntrada =
+      plano.tipo === "entrada_restante"
+        ? plano.pct
+        : plano.tipo === "parcelado" && plano.subtipo === "entrada_diferenciada"
+        ? Number(plano.pctEntrada.toFixed(2))
+        : 0;
+
+    // Campos comuns a criar e editar (status e numero não mudam na edição).
+    const dados = {
+      cliente_id: form.cliente_id || null,
+      titulo: form.cliente_nome
+        ? `${dict.pdf.titulo} — ${form.cliente_nome}`
+        : dict.pdf.titulo,
+      itens,
+      subtotal: total,
+      desconto: 0,
+      total,
+      moeda,
+      template: form.template,
+      opcao_pagamento: form.opcao_pagamento,
+      parcelas: plano.tipo === "parcelado" ? plano.n : 1,
+      percentual_entrada: percentualEntrada,
+    };
+
+    // ── Edição: atualiza o registro existente (mantém numero e status) ──
+    if (editingId) {
+      const { error } = await supabase
+        .from("orcamentos")
+        .update(dados)
+        .eq("id", editingId);
+      setSalvando(false);
+      if (error) {
+        setErro(dict.orc.erroSalvar(error.message));
+        return null;
+      }
+      await salvarOuAtualizarCliente();
+      setSalvo(true);
+      return { id: editingId, numero };
+    }
+
+    // ── Novo: o numero é atribuído pelo banco (trigger sequencial por tenant) ──
     const { data, error } = await supabase
       .from("orcamentos")
       .insert({
         tenant_id: tenantId,
         user_id: userId,
-        cliente_id: form.cliente_id || null,
-        numero,
-        titulo: form.cliente_nome
-          ? `${dict.pdf.titulo} — ${form.cliente_nome}`
-          : dict.pdf.titulo,
-        itens,
-        subtotal: total,
-        desconto: 0,
-        total,
-        moeda,
+        numero: null,
         status: "rascunho",
-        template: form.template,
-        opcao_pagamento: form.opcao_pagamento,
-        parcelas: plano.tipo === "parcelado" ? plano.n : 1,
-        percentual_entrada:
-          plano.tipo === "entrada_restante"
-            ? plano.pct
-            : plano.tipo === "parcelado" &&
-              plano.subtipo === "entrada_diferenciada"
-            ? Number(plano.pctEntrada.toFixed(2))
-            : 0,
+        ...dados,
       })
-      .select("id")
+      .select("id, numero")
       .single();
 
     setSalvando(false);
@@ -632,14 +766,33 @@ export function OrcamentosManager() {
     // não-bloqueante e silencioso em caso de falha).
     await salvarOuAtualizarCliente();
 
+    const novoNumero = (data?.numero as string) ?? "";
+    if (novoNumero) setNumero(novoNumero);
+    // Salvar de novo passa a atualizar este mesmo registro (evita duplicar).
+    if (data?.id) setEditingId(data.id as string);
+
     setSalvo(true);
-    return (data?.id as string) ?? null;
+    return { id: (data?.id as string) ?? null, numero: novoNumero || numero };
   }
 
-  async function gerarPDF() {
+  async function gerarPDF(numeroPdf?: string) {
     if (!previewRef.current) return;
     setGerando(true);
     try {
+      // Aguarda logos/imagens carregarem antes do snapshot (importante ao
+      // regenerar direto da lista, quando a página acabou de abrir).
+      const imgs = Array.from(previewRef.current.querySelectorAll("img"));
+      await Promise.all(
+        imgs.map((img) =>
+          img.complete
+            ? Promise.resolve()
+            : new Promise((res) => {
+                img.onload = () => res(null);
+                img.onerror = () => res(null);
+              }),
+        ),
+      );
+
       const { default: html2canvas } = await import("html2canvas");
       const { jsPDF } = await import("jspdf");
 
@@ -664,7 +817,9 @@ export function OrcamentosManager() {
         pdf.textWithLink(`→ ${linkPagamento}`, 12, linkY, { url: linkPagamento });
       }
 
-      pdf.save(`orcamento-${form.cliente_nome || "cliente"}-${numero}.pdf`);
+      pdf.save(
+        `orcamento-${form.cliente_nome || "cliente"}-${numeroPdf ?? numero}.pdf`,
+      );
     } catch (e) {
       console.error(e);
     }
@@ -672,7 +827,9 @@ export function OrcamentosManager() {
   }
 
   async function salvarEGerar() {
-    const id = await salvarOrcamento();
+    const res = await salvarOrcamento();
+    const id = res?.id ?? null;
+    const numeroPdf = res?.numero ?? numero;
 
     // Se o orçamento foi salvo e o prestador tem Mercado Pago conectado, gera o
     // link público de pagamento + QR code e aguarda o DOM refletir antes do PDF.
@@ -689,9 +846,12 @@ export function OrcamentosManager() {
       setLinkPagamento(link);
       setQrPagamento(qr);
       await new Promise((r) => setTimeout(r, 80));
+    } else {
+      // Dá tempo do preview refletir o número recém-gerado antes de rasterizar.
+      await new Promise((r) => setTimeout(r, 60));
     }
 
-    await gerarPDF();
+    await gerarPDF(numeroPdf);
   }
 
   // Props compartilhadas pelos três templates de PDF (prévia e geração).

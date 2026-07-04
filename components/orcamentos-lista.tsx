@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Archive, ArchiveRestore, Trash2, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import {
+  Archive,
+  ArchiveRestore,
+  Trash2,
+  RefreshCw,
+  Pencil,
+  FileDown,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
 import { fmtMoeda } from "@/lib/moeda";
@@ -117,6 +125,26 @@ export function OrcamentosLista() {
     setProcessando(null);
   }
 
+  async function mudarStatus(id: string, status: OrcamentoStatus) {
+    setProcessando(id);
+    setErro(null);
+    const anterior = orcamentos;
+    // Otimista: reflete a mudança antes da resposta do banco.
+    setOrcamentos((atuais) =>
+      atuais.map((o) => (o.id === id ? { ...o, status } : o)),
+    );
+    const { error } = await supabase
+      .from("orcamentos")
+      .update({ status })
+      .eq("id", id);
+    if (error) {
+      console.error("[OrcamentosLista] erro ao mudar status:", error);
+      setErro(dict.lista.erroStatus);
+      setOrcamentos(anterior); // reverte
+    }
+    setProcessando(null);
+  }
+
   async function deletar(id: string, rotulo: string) {
     const ok = window.confirm(dict.lista.confirmDeletar(rotulo));
     if (!ok) return;
@@ -160,6 +188,42 @@ export function OrcamentosLista() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {!ehArquivado && (
+            <select
+              value={o.status}
+              onChange={(e) =>
+                mudarStatus(o.id, e.target.value as OrcamentoStatus)
+              }
+              disabled={ocupado}
+              title={dict.lista.alterarStatus}
+              aria-label={dict.lista.alterarStatus}
+              className="rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-700 dark:text-gray-200 outline-none transition focus:border-gray-900 dark:focus:border-gray-400 disabled:opacity-40"
+            >
+              {(
+                ["rascunho", "enviado", "aprovado", "recusado"] as OrcamentoStatus[]
+              ).map((s) => (
+                <option key={s} value={s}>
+                  {dict.lista.status[s]}
+                </option>
+              ))}
+            </select>
+          )}
+          <Link
+            href={`/dashboard/orcamentos?id=${o.id}`}
+            title={dict.lista.editar}
+            aria-label={dict.lista.editar}
+            className="rounded-md p-2 text-gray-400 dark:text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200"
+          >
+            <Pencil className="h-4 w-4" />
+          </Link>
+          <Link
+            href={`/dashboard/orcamentos?id=${o.id}&pdf=1`}
+            title={dict.lista.baixarPdf}
+            aria-label={dict.lista.baixarPdf}
+            className="rounded-md p-2 text-gray-400 dark:text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200"
+          >
+            <FileDown className="h-4 w-4" />
+          </Link>
           {ehArquivado ? (
             <button
               type="button"

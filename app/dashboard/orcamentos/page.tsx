@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { OrcamentosManager } from "@/components/orcamentos-manager";
 import { OrcamentosLista } from "@/components/orcamentos-lista";
 
@@ -8,7 +9,9 @@ export const metadata = {
 export default function OrcamentosPage() {
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <OrcamentosManager />
+      <Suspense fallback={null}>
+        <OrcamentosManager />
+      </Suspense>
       <OrcamentosLista />
     </main>
   );
