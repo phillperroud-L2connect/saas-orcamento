@@ -17,6 +17,9 @@ const ROTAS_PUBLICAS = [
   "/api/cadastro",
   // Página pública de pagamento do orçamento (cliente final, sem conta).
   "/pagar",
+  // Recuperação de senha: forgot-password (sem sessão) e reset-password
+  // (só ganha a sessão de recuperação após trocar o code do link do e-mail).
+  "/auth",
 ];
 
 export async function middleware(request: NextRequest) {
@@ -62,7 +65,9 @@ export async function middleware(request: NextRequest) {
 
   // Já logado tentando acessar login/cadastro -> /dashboard.
   // Exceção: admin em /login ou /cadastro vai direto para o painel /admin.
-  if (user && ehRotaPublica) {
+  // Exceção: /auth/reset-password roda com uma sessão de recuperação — não
+  // pode ser desviado, senão o usuário nunca chega a definir a nova senha.
+  if (user && ehRotaPublica && !pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone();
     const ehLoginOuCadastro =
       pathname.startsWith("/login") || pathname.startsWith("/cadastro");

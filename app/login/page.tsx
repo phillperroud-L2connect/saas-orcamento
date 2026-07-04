@@ -95,6 +95,15 @@ export default function LoginPage() {
           >
             {carregando ? "Entrando..." : "Entrar"}
           </button>
+
+          <p className="text-center text-sm">
+            <Link
+              href="/auth/forgot-password"
+              className="text-gray-500 underline-offset-2 hover:text-gray-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100"
+            >
+              Esqueci minha senha
+            </Link>
+          </p>
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
