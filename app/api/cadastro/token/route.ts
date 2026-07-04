@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceSupabase } from "@/lib/supabase-service";
-import { getPlano } from "@/lib/planos";
+import { getPlano, isPeriodo, type Periodo } from "@/lib/planos";
 import {
   aplicarRateLimit,
   limiterCadastro,
@@ -28,6 +28,7 @@ type TokenRow = {
   id: string;
   email: string;
   plano: string;
+  periodo: string | null;
   usado: boolean;
   expira_em: string;
 };
@@ -41,7 +42,7 @@ async function carregarToken(
 
   const { data, error } = await supabase
     .from("onboarding_tokens")
-    .select("id, email, plano, usado, expira_em")
+    .select("id, email, plano, periodo, usado, expira_em")
     .eq("token", token)
     .maybeSingle();
 
@@ -137,9 +138,13 @@ export async function POST(req: Request) {
   const tenantId = userRow?.tenant_id ?? null;
 
   if (tenantId) {
-    // Sem período no token: assume mensal (vencimento +1 mês).
+    // Vencimento conforme o período contratado: +12 meses (anual) ou +1 mês
+    // (mensal). Tokens antigos sem período caem no default mensal.
+    const periodo: Periodo = isPeriodo(row.periodo ?? "")
+      ? (row.periodo as Periodo)
+      : "mensal";
     const venc = new Date();
-    venc.setMonth(venc.getMonth() + 1);
+    venc.setMonth(venc.getMonth() + (periodo === "anual" ? 12 : 1));
 
     await supabase
       .from("tenants")
@@ -154,6 +159,15 @@ export async function POST(req: Request) {
         vencimento: venc.toISOString().slice(0, 10),
       })
       .eq("id", tenantId);
+
+    // Vincula a(s) venda(s) desse e-mail ao tenant recém-criado. No webhook a
+    // assinatura é gravada com tenant_id nulo (o tenant ainda não existia), o
+    // que deixava o painel admin sem contar os pagamentos por assinante.
+    await supabase
+      .from("assinaturas")
+      .update({ tenant_id: tenantId })
+      .eq("email", email)
+      .is("tenant_id", null);
   }
 
   // 3) Marca o token como usado (consome o link de cadastro).

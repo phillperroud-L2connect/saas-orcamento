@@ -25,11 +25,19 @@ create table if not exists public.onboarding_tokens (
   -- o webhook gera o uuid no servidor e insere explicitamente.
   token       uuid not null unique default gen_random_uuid(),
   plano       text not null check (plano in ('basico', 'pro')),
+  -- Periodicidade contratada — define o vencimento na criação da conta
+  -- (+1 mês para 'mensal', +12 meses para 'anual').
+  periodo     text not null default 'mensal' check (periodo in ('mensal', 'anual')),
   usado       boolean not null default false,
   criado_em   timestamptz not null default now(),
   -- Expira 24h após a criação. Validado também na aplicação.
   expira_em   timestamptz not null default (now() + interval '24 hours')
 );
+
+-- Migração para bancos que já tinham a tabela antes da coluna `periodo`.
+alter table public.onboarding_tokens
+  add column if not exists periodo text not null default 'mensal'
+    check (periodo in ('mensal', 'anual'));
 
 create index if not exists idx_onboarding_tokens_token on public.onboarding_tokens (token);
 create index if not exists idx_onboarding_tokens_email on public.onboarding_tokens (email);

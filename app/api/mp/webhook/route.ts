@@ -6,7 +6,7 @@ import {
   verificarAssinaturaMpWebhook,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
-import { getPlano } from "@/lib/planos";
+import { getPlano, isPeriodo } from "@/lib/planos";
 import { enviarLinkCadastro, notificarAdminNovaVenda } from "@/lib/email";
 import {
   aplicarRateLimit,
@@ -76,6 +76,8 @@ export async function POST(req: Request) {
 
     const meta = (payment.metadata ?? {}) as Record<string, unknown>;
     const plano = getPlano(String(meta.plano ?? ""));
+    const periodoMeta = String(meta.periodo ?? "");
+    const periodo = isPeriodo(periodoMeta) ? periodoMeta : "mensal";
     const nome = String(meta.nome ?? payment.payer?.first_name ?? "").trim();
     const email = String(meta.email ?? payment.payer?.email ?? "")
       .trim()
@@ -122,6 +124,7 @@ export async function POST(req: Request) {
       email,
       token,
       plano: plano.id,
+      periodo,
       expira_em: expiraEm.toISOString(),
     });
 
