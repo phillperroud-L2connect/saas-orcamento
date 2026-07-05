@@ -256,7 +256,7 @@ export function ServicosManager() {
                 {editId === s.id ? (
                   <>
                     <input
-                      className={`${inputCls} flex-1`}
+                      className={`${inputCls} min-w-0 flex-1`}
                       value={editNome}
                       onChange={(e) => setEditNome(e.target.value)}
                       onKeyDown={(e) => {
@@ -266,7 +266,7 @@ export function ServicosManager() {
                       autoFocus
                     />
                     <input
-                      className={`${inputCls} w-32`}
+                      className={`${inputCls} w-24 shrink-0 sm:w-32`}
                       type="number"
                       step="0.01"
                       min="0"
@@ -296,10 +296,10 @@ export function ServicosManager() {
                   </>
                 ) : (
                   <>
-                    <span className="flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                       {s.nome}
                     </span>
-                    <span className="w-32 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="w-24 shrink-0 text-right text-sm font-semibold text-gray-900 sm:w-32 dark:text-gray-100">
                       {fmt(s.preco)}
                     </span>
                     <button

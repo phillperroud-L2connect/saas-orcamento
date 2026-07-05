@@ -33,8 +33,9 @@ export function DashboardHeader() {
         </div>
       </div>
 
-      {/* Navegação em telas pequenas */}
-      <div className="border-t border-gray-100 px-4 py-2 dark:border-gray-800 md:hidden">
+      {/* Navegação em telas pequenas — faixa rolável na horizontal quando os
+          itens não cabem em uma linha, sem forçar scroll na página inteira. */}
+      <div className="no-scrollbar overflow-x-auto border-t border-gray-100 px-4 py-2 dark:border-gray-800 md:hidden">
         <DashboardNav />
       </div>
     </header>

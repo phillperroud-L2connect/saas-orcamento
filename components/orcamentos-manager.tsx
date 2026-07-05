@@ -1060,7 +1060,7 @@ export function OrcamentosManager() {
 
             {form.servicos.map((s, i) => (
               <div key={s.id} className="flex items-start gap-2">
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <input
                     className={inputCls}
                     placeholder={dict.orc.servicoN(i + 1)}
@@ -1070,7 +1070,7 @@ export function OrcamentosManager() {
                     }
                   />
                 </div>
-                <div className="w-32">
+                <div className="w-24 shrink-0 sm:w-32">
                   <input
                     className={inputCls}
                     type="number"
@@ -1494,22 +1494,26 @@ export function OrcamentosManager() {
             {dict.orc.previaDoc}
           </p>
 
-          <div
-            ref={previewRef}
-            style={{
-              background: "#ffffff",
-              color: "#111111",
-              fontFamily: "Helvetica Neue, Arial, sans-serif",
-              minHeight: "297mm",
-            }}
-          >
-            {form.template === "moderno" ? (
-              <TemplateModerno {...templateProps} />
-            ) : form.template === "simples" ? (
-              <TemplateSimples {...templateProps} />
-            ) : (
-              <TemplateClassico {...templateProps} />
-            )}
+          {/* Rolagem própria: em telas estreitas o documento A4 não é espremido
+              nem empurra a página — rola dentro do seu próprio contêiner. */}
+          <div className="no-scrollbar overflow-x-auto">
+            <div
+              ref={previewRef}
+              style={{
+                background: "#ffffff",
+                color: "#111111",
+                fontFamily: "Helvetica Neue, Arial, sans-serif",
+                minHeight: "297mm",
+              }}
+            >
+              {form.template === "moderno" ? (
+                <TemplateModerno {...templateProps} />
+              ) : form.template === "simples" ? (
+                <TemplateSimples {...templateProps} />
+              ) : (
+                <TemplateClassico {...templateProps} />
+              )}
+            </div>
           </div>
         </div>
       </div>

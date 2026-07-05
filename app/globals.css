@@ -24,8 +24,28 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Rede de segurança contra scroll horizontal indevido em mobile: nenhum
+   elemento deve empurrar a página para além da largura do viewport. Os
+   overflows reais são corrigidos nos componentes; isto evita que um caso
+   pontual quebre o layout inteiro em telas estreitas (320px–428px). */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* Faixa rolável horizontalmente sem exibir a barra de rolagem — usada na
+     navegação em telas pequenas, onde os itens não cabem em uma linha. */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE e Edge legado */
+    scrollbar-width: none; /* Firefox */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Edge */
   }
 }
