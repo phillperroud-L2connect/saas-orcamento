@@ -14,6 +14,12 @@ import {
   getClientIp,
   tooManyRequests,
 } from "@/lib/rate-limit";
+import { withTimeout } from "@/lib/async";
+
+/** Watchdogs para as chamadas de rede/DB do webhook (ms). */
+const MP_TIMEOUT_MS = 10_000;
+const DB_TIMEOUT_MS = 8_000;
+const EMAIL_TIMEOUT_MS = 10_000;
 
 /**
  * POST /api/mp/webhook
@@ -65,9 +71,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    const payment = await new Payment(getMercadoPagoClient()).get({
-      id: paymentId,
-    });
+    const payment = await withTimeout(
+      new Payment(getMercadoPagoClient()).get({ id: paymentId }),
+      MP_TIMEOUT_MS,
+      "consultar pagamento no Mercado Pago",
+    );
 
     if (payment.status !== "approved") {
       // Pendente/recusado: nada a provisionar ainda.
@@ -91,19 +99,41 @@ export async function POST(req: Request) {
 
     const supabase = createServiceSupabase();
 
-    // --- 1. Idempotência: tenta registrar a venda primeiro. -----------------
+    // --- 1. Renovação x venda nova. -----------------------------------------
+    // Se já existe um tenant com esse e-mail, o pagamento é uma RENOVAÇÃO.
+    // A busca vem ANTES do insert de propósito: se ela falhar, respondemos 500
+    // sem gravar nada e o Mercado Pago reenvia com segurança (a idempotência do
+    // insert impede reprocessar quando a busca dá certo). Comparação por e-mail
+    // exato (lowercase) — tenants.email vem do auth, sempre em minúsculas.
+    const { data: tenantExistente } = await withTimeout(
+      supabase
+        .from("tenants")
+        .select("id, vencimento")
+        .eq("email", email)
+        .maybeSingle(),
+      DB_TIMEOUT_MS,
+      "buscar tenant por e-mail",
+    );
+
+    // --- 2. Idempotência: registra a venda. ---------------------------------
     // mp_payment_id é UNIQUE; se já existir, foi processada — encerra aqui.
-    const { error: insertErr } = await supabase.from("assinaturas").insert({
-      mp_payment_id: String(payment.id),
-      external_reference: payment.external_reference ?? null,
-      plano: plano.id,
-      nome: nome || null,
-      email,
-      whatsapp,
-      valor: payment.transaction_amount ?? plano.preco,
-      status: payment.status,
-      forma_pagamento: "mercado_pago",
-    });
+    // Numa renovação já vinculamos a venda ao tenant existente.
+    const { error: insertErr } = await withTimeout(
+      supabase.from("assinaturas").insert({
+        mp_payment_id: String(payment.id),
+        external_reference: payment.external_reference ?? null,
+        plano: plano.id,
+        nome: nome || null,
+        email,
+        whatsapp,
+        valor: payment.transaction_amount ?? plano.preco,
+        status: payment.status,
+        forma_pagamento: "mercado_pago",
+        tenant_id: tenantExistente?.id ?? null,
+      }),
+      DB_TIMEOUT_MS,
+      "registrar assinatura",
+    );
 
     if (insertErr) {
       // 23505 = unique_violation → webhook duplicado, já provisionado.
@@ -114,19 +144,72 @@ export async function POST(req: Request) {
       return NextResponse.json({ erro: "db" }, { status: 500 });
     }
 
-    // --- 2. Onboarding: gera o token de cadastro (válido por 24h). ----------
+    // --- 3a. RENOVAÇÃO: estende o vencimento direto no tenant. ---------------
+    // Espelha o botão "Marcar como pago" do admin, estendendo a partir do
+    // vencimento atual (se ainda no futuro) para não perder os dias restantes.
+    // NÃO recria cadastro nem envia link — a conta já existe.
+    if (tenantExistente?.id) {
+      try {
+        const agora = new Date();
+        const base =
+          tenantExistente.vencimento &&
+          new Date(`${tenantExistente.vencimento}T23:59:59`) > agora
+            ? new Date(`${tenantExistente.vencimento}T00:00:00`)
+            : agora;
+        base.setMonth(base.getMonth() + (periodo === "anual" ? 12 : 1));
+        const novoVencimento = base.toISOString().slice(0, 10);
+
+        await withTimeout(
+          supabase
+            .from("tenants")
+            .update({
+              plano: plano.id,
+              status_assinatura: "pago",
+              ativo: true,
+              forma_pagamento: "mercado_pago",
+              vencimento: novoVencimento,
+            })
+            .eq("id", tenantExistente.id),
+          DB_TIMEOUT_MS,
+          "estender vencimento do tenant (renovação)",
+        );
+      } catch (renovErr) {
+        // Venda já registrada (idempotência impede reprocesso). Loga para o
+        // admin reconciliar manualmente pelo botão "Marcar como pago".
+        console.error(
+          "[mp/webhook] falha ao estender vencimento (renovação):",
+          renovErr,
+        );
+      }
+
+      await Promise.allSettled([
+        withTimeout(
+          notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano }),
+          EMAIL_TIMEOUT_MS,
+          "e-mail notificar admin (renovação)",
+        ),
+      ]);
+
+      return NextResponse.json({ ok: true, renovacao: true }, { status: 200 });
+    }
+
+    // --- 3b. VENDA NOVA: gera o token de cadastro (válido por 24h). ----------
     // Em vez de criar o tenant agora, o cliente define a senha pelo link
     // tokenizado; a conta + tenant são provisionados em /api/cadastro/token.
     const token = crypto.randomUUID();
     const expiraEm = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    const { error: tokenErr } = await supabase.from("onboarding_tokens").insert({
-      email,
-      token,
-      plano: plano.id,
-      periodo,
-      expira_em: expiraEm.toISOString(),
-    });
+    const { error: tokenErr } = await withTimeout(
+      supabase.from("onboarding_tokens").insert({
+        email,
+        token,
+        plano: plano.id,
+        periodo,
+        expira_em: expiraEm.toISOString(),
+      }),
+      DB_TIMEOUT_MS,
+      "gravar token de onboarding",
+    );
 
     if (tokenErr) {
       console.error("[mp/webhook] erro ao gravar token de onboarding:", tokenErr);
@@ -135,10 +218,18 @@ export async function POST(req: Request) {
 
     const linkCadastro = `${getSiteUrl()}/cadastro?token=${token}`;
 
-    // --- 3. E-mails (best-effort — não derrubam o webhook). -----------------
+    // --- 4. E-mails (best-effort — não derrubam o webhook). -----------------
     await Promise.allSettled([
-      enviarLinkCadastro({ email, plano, linkCadastro }),
-      notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano }),
+      withTimeout(
+        enviarLinkCadastro({ email, plano, linkCadastro }),
+        EMAIL_TIMEOUT_MS,
+        "e-mail link de cadastro",
+      ),
+      withTimeout(
+        notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano }),
+        EMAIL_TIMEOUT_MS,
+        "e-mail notificar admin",
+      ),
     ]);
 
     return NextResponse.json({ ok: true }, { status: 200 });
