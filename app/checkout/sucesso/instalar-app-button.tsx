@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download, Check } from "lucide-react";
+import { detectarIosSafariInstalavel } from "@/components/use-ios-install";
 
 // Evento beforeinstallprompt não faz parte do lib.dom padrão.
 interface BeforeInstallPromptEvent extends Event {
@@ -21,6 +22,11 @@ export default function InstalarAppButton() {
   const [instalando, setInstalando] = useState(false);
   const [instalado, setInstalado] = useState(false);
   const [mostrarManual, setMostrarManual] = useState(false);
+  const [ehIosSafari, setEhIosSafari] = useState(false);
+
+  useEffect(() => {
+    setEhIosSafari(detectarIosSafariInstalavel());
+  }, []);
 
   useEffect(() => {
     const onPrompt = (e: Event) => {
@@ -82,10 +88,20 @@ export default function InstalarAppButton() {
 
       {mostrarManual && !instalado && (
         <p className="mt-3 text-xs leading-relaxed text-[#6a7490]">
-          Seu navegador não oferece instalação automática aqui. Abra o menu do
-          navegador e toque em{" "}
-          <span className="text-[#aab4c8]">“Instalar app”</span> ou{" "}
-          <span className="text-[#aab4c8]">“Adicionar à tela inicial”</span>.
+          {ehIosSafari ? (
+            <>
+              Toque em <span className="text-[#aab4c8]">Compartilhar</span> na
+              barra do Safari e depois em{" "}
+              <span className="text-[#aab4c8]">“Adicionar à Tela de Início”</span>.
+            </>
+          ) : (
+            <>
+              Seu navegador não oferece instalação automática aqui. Abra o menu
+              do navegador e toque em{" "}
+              <span className="text-[#aab4c8]">“Instalar app”</span> ou{" "}
+              <span className="text-[#aab4c8]">“Adicionar à tela inicial”</span>.
+            </>
+          )}
         </p>
       )}
     </div>
