@@ -237,6 +237,71 @@ export async function notificarPrestadorPagamento({
   }
 }
 
+type RecuperacaoAdminParams = {
+  /** E-mail do administrador (destinatário). */
+  email: string;
+  /** Link tokenizado para redefinir a senha do admin. */
+  link: string;
+};
+
+/**
+ * E-mail de recuperação de senha do PAINEL ADMINISTRATIVO. Assunto e corpo
+ * deixam explícito que é o acesso admin (não confundir com a recuperação de
+ * usuário comum). Best-effort (ver getResend): não lança se a chave faltar.
+ */
+export async function enviarRecuperacaoAdmin({
+  email,
+  link,
+}: RecuperacaoAdminParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const html = `
+  <div style="background:#0A0A0A;padding:32px 16px;font-family:Arial,Helvetica,sans-serif">
+    <div style="max-width:520px;margin:0 auto">
+      <div style="border:1px solid #1f1f1f;border-radius:16px;padding:32px;background:#111">
+        <p style="color:#f59e0b;font-size:12px;font-weight:700;letter-spacing:.08em;margin:0 0 8px">
+          🛡️ ACESSO ADMINISTRATIVO
+        </p>
+        <h1 style="font-size:22px;margin:0 0 8px;color:#fafafa;font-weight:700">
+          Redefinição de senha do painel admin
+        </h1>
+        <p style="color:#a3a3a3;line-height:1.6;font-size:15px;margin:0 0 24px">
+          Você solicitou a redefinição da senha do
+          <strong style="color:#fafafa">Painel Administrativo</strong> do Gerador
+          de Orçamento. Este link é exclusivo do acesso admin — não tem relação
+          com contas de usuários comuns.
+        </p>
+        <p style="margin:0 0 24px">
+          <a href="${link}"
+             style="background:#fff;color:#0A0A0A;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block">
+            Redefinir senha do admin
+          </a>
+        </p>
+        <p style="color:#f59e0b;font-size:13px;line-height:1.6;margin:0 0 20px">
+          ⏳ O link expira em ~1 hora e só pode ser usado uma vez.
+        </p>
+        <p style="color:#737373;font-size:12px;line-height:1.6;margin:0">
+          Se não foi você que pediu, ignore este e-mail — a senha atual continua
+          válida.<br>
+          <span style="color:#a3a3a3;word-break:break-all">${link}</span>
+        </p>
+      </div>
+    </div>
+  </div>`;
+
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: email,
+    subject: "[ADMIN] Redefinição de acesso administrativo — Gerador de Orçamento",
+    html,
+  });
+
+  if (error) {
+    console.error("[email] Falha ao enviar recuperação do admin:", error);
+  }
+}
+
 /** Escapa caracteres perigosos para interpolação segura em HTML. */
 function escapeHtml(str: string): string {
   return str

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { isAdminUser } from "@/lib/admin";
@@ -113,6 +114,15 @@ export default function AdminLoginPage() {
           >
             {carregando ? "Entrando..." : "Entrar no painel"}
           </button>
+
+          <p className="text-center">
+            <Link
+              href="/admin/forgot-password"
+              className="text-xs font-medium text-white/40 underline-offset-2 transition hover:text-white/70 hover:underline"
+            >
+              Esqueci minha senha
+            </Link>
+          </p>
         </form>
 
         <p className="mt-7 text-center text-xs text-white/30">

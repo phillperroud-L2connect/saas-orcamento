@@ -15,7 +15,7 @@ const BUCKET = "logos";
 const PAIS_POR_IDIOMA: Record<Idioma, Pais> = { pt: "BR", es: "AR" };
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
+  "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition [color-scheme:light] focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
 const labelCls = "block text-sm font-medium text-gray-700 mb-1.5";
 
 type Props = {

@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   ShieldCheck,
   ShieldOff,
+  Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import type {
@@ -50,7 +51,7 @@ const STATUS_BADGE: Record<StatusAssinatura, { dot: string; chip: string }> = {
 };
 
 const selectCls =
-  "w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
+  "w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm text-gray-900 outline-none transition [color-scheme:light] focus:border-gray-900 focus:ring-1 focus:ring-gray-900";
 const labelCls = "mb-1 block text-xs font-medium text-gray-500";
 
 function formatarData(d: string | null): string {
@@ -82,9 +83,9 @@ export function TenantRow({ tenant, pagamentos }: Props) {
   const supabase = createClient();
 
   const [aberto, setAberto] = useState(false);
-  const [salvando, setSalvando] = useState<null | "campos" | "acesso" | "pago">(
-    null,
-  );
+  const [salvando, setSalvando] = useState<
+    null | "campos" | "acesso" | "pago" | "excluir"
+  >(null);
   const [erro, setErro] = useState<string | null>(null);
 
   // Estado editável (sincronizado com o tenant recebido do servidor).
@@ -194,6 +195,31 @@ export function TenantRow({ tenant, pagamentos }: Props) {
       return;
     }
     router.refresh();
+  }
+
+  // Exclusão permanente do tenant (conta + todos os dados). Irreversível.
+  async function excluirTenant() {
+    const ok = window.confirm(
+      `Excluir PERMANENTEMENTE "${tenant.nome_empresa}"?\n\nIsso remove a conta, o acesso e TODOS os dados (clientes, orçamentos, pagamentos e histórico). Não há como desfazer.`,
+    );
+    if (!ok) return;
+    setErro(null);
+    setSalvando("excluir");
+    try {
+      const resp = await fetch("/api/admin/excluir-tenant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: tenant.id }),
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(j?.erro ?? "falha");
+      }
+      router.refresh(); // a linha some da lista ao recarregar
+    } catch (e) {
+      setErro(`Erro ao excluir: ${e instanceof Error ? e.message : "desconhecido"}`);
+      setSalvando(null);
+    }
   }
 
   return (
@@ -399,6 +425,21 @@ export function TenantRow({ tenant, pagamentos }: Props) {
                     <CircleDollarSign className="size-4" />
                   )}
                   Marcar como pago
+                </button>
+
+                {/* Excluir permanentemente */}
+                <button
+                  type="button"
+                  onClick={excluirTenant}
+                  disabled={salvando !== null}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                >
+                  {salvando === "excluir" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
+                  Excluir
                 </button>
 
                 {/* Salvar campos */}

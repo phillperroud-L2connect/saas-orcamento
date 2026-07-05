@@ -9,6 +9,12 @@ const ROTAS_PUBLICAS = [
   "/login",
   "/cadastro",
   "/admin/login",
+  // Recuperação de senha do admin (sem sessão; o reset ganha a sessão de
+  // recuperação só após o verifyOtp do token do e-mail).
+  "/admin/forgot-password",
+  "/admin/reset-password",
+  // Endpoint público que dispara o e-mail de recuperação do admin.
+  "/api/admin/recuperar-senha",
   "/checkout",
   "/api/mp",
   // Login server-side (rate-limited) — chamado por quem ainda não tem sessão.
@@ -67,7 +73,13 @@ export async function middleware(request: NextRequest) {
   // Exceção: admin em /login ou /cadastro vai direto para o painel /admin.
   // Exceção: /auth/reset-password roda com uma sessão de recuperação — não
   // pode ser desviado, senão o usuário nunca chega a definir a nova senha.
-  if (user && ehRotaPublica && !pathname.startsWith("/auth")) {
+  if (
+    user &&
+    ehRotaPublica &&
+    !pathname.startsWith("/auth") &&
+    !pathname.startsWith("/admin/reset-password") &&
+    !pathname.startsWith("/admin/forgot-password")
+  ) {
     const url = request.nextUrl.clone();
     const ehLoginOuCadastro =
       pathname.startsWith("/login") || pathname.startsWith("/cadastro");
@@ -81,6 +93,8 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/admin") &&
     pathname !== "/admin/login" &&
+    !pathname.startsWith("/admin/forgot-password") &&
+    !pathname.startsWith("/admin/reset-password") &&
     !isAdminUser(user)
   ) {
     const url = request.nextUrl.clone();
