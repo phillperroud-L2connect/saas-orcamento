@@ -5,9 +5,10 @@
  *
  * Origens externas permitidas (mapeadas a partir do uso real do código):
  *  - https://sdk.mercadopago.com   → SDK JS do checkout (app/checkout/[plano])
- *  - https://api.mercadopago.com   → chamadas à API do Mercado Pago
+ *  - https://http2.mlstatic.com    → bundle do Wallet Brick (script injetado pelo SDK)
+ *  - https://api.mercadopago.com / api.mercadolibre.com → chamadas de API do brick
  *  - https://*.mercadopago.com / *.mercadolibre.com → redirect/iframe do checkout
- *  - https://*.mlstatic.com        → imagens/estáticos do Mercado Pago
+ *  - https://*.mlstatic.com        → imagens/estáticos e assets do Wallet Brick
  *  - https://*.supabase.co (+wss)  → Auth, banco e Realtime do Supabase
  *  - blob:/data:                   → logos (upload), QR codes e fontes locais
  *
@@ -17,11 +18,11 @@
  */
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://sdk.mercadopago.com",
+  "script-src 'self' 'unsafe-inline' https://sdk.mercadopago.com https://http2.mlstatic.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.supabase.co https://*.mercadopago.com https://*.mlstatic.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.mercadopago.com https://sdk.mercadopago.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.mercadopago.com https://sdk.mercadopago.com https://*.mlstatic.com https://api.mercadolibre.com",
   "frame-src 'self' https://*.mercadopago.com https://*.mercadolibre.com",
   "form-action 'self' https://*.mercadopago.com",
   "base-uri 'self'",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 // Tipagem do evento beforeinstallprompt (não está no lib.dom padrão).
 interface BeforeInstallPromptEvent extends Event {
@@ -12,6 +13,7 @@ export default function PwaManager() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [instalando, setInstalando] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     // 1) Registra o service worker (servido em /login/sw.js, escopo "/").
@@ -51,8 +53,17 @@ export default function PwaManager() {
     setInstalando(false);
   }
 
+  // Não exibir o botão flutuante na tela de checkout do plano
+  // (/checkout/[plano]): o cliente ainda não pagou nem tem conta. A instalação
+  // é oferecida depois, na tela de sucesso (/checkout/sucesso). O registro do
+  // service worker e os listeners acima continuam ativos — só ocultamos o botão.
+  const naTelaCheckoutPlano =
+    !!pathname &&
+    pathname.startsWith("/checkout/") &&
+    pathname !== "/checkout/sucesso";
+
   // Só aparece quando o navegador realmente suporta a instalação do PWA.
-  if (!deferredPrompt) return null;
+  if (!deferredPrompt || naTelaCheckoutPlano) return null;
 
   return (
     <button

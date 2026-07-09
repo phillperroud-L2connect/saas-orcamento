@@ -39,13 +39,49 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
   const [erro, setErro] = useState<string | null>(null);
   const [initPoint, setInitPoint] = useState<string | null>(null);
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
+  // SDK do Mercado Pago (window.MercadoPago) disponível? Pode já estar pronto
+  // no primeiro render, ou carregar depois (via <Script> em page.tsx).
+  const [sdkPronto, setSdkPronto] = useState(
+    typeof window !== "undefined" && !!window.MercadoPago,
+  );
 
   const walletRef = useRef<HTMLDivElement>(null);
 
+  // Aguarda o SDK do Mercado Pago ficar disponível. Sem isto, se o cliente
+  // enviasse o formulário antes de o SDK terminar de carregar, o effect de
+  // montagem saía calado e o Wallet Brick nunca era montado — restando só o
+  // link de fallback.
+  useEffect(() => {
+    if (sdkPronto || typeof window === "undefined") return;
+    if (window.MercadoPago) {
+      setSdkPronto(true);
+      return;
+    }
+    let cancelado = false;
+    const intervalo = window.setInterval(() => {
+      try {
+        if (window.MercadoPago) {
+          window.clearInterval(intervalo);
+          if (!cancelado) setSdkPronto(true);
+        }
+      } catch (e) {
+        window.clearInterval(intervalo);
+        console.error("[checkout] erro ao detectar SDK do Mercado Pago:", e);
+      }
+    }, 200);
+    return () => {
+      cancelado = true;
+      window.clearInterval(intervalo);
+    };
+  }, [sdkPronto]);
+
   // Monta o Wallet Brick assim que a preferência é criada e o SDK carregou.
+  // Depende de `sdkPronto` para re-disparar sozinho quando o SDK ficar pronto.
   useEffect(() => {
     if (!preferenceId || !walletRef.current) return;
-    if (!publicKey || typeof window === "undefined" || !window.MercadoPago) return;
+    if (!publicKey || !sdkPronto || typeof window === "undefined" || !window.MercadoPago) {
+      return;
+    }
 
     walletRef.current.innerHTML = "";
     try {
@@ -58,7 +94,7 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
     } catch (e) {
       console.error("[checkout] falha ao montar wallet:", e);
     }
-  }, [preferenceId, publicKey, lang]);
+  }, [preferenceId, publicKey, lang, sdkPronto]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
