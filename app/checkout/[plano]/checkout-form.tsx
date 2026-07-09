@@ -39,6 +39,9 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
   const [erro, setErro] = useState<string | null>(null);
   const [initPoint, setInitPoint] = useState<string | null>(null);
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
+  // QR code (data URL PNG) apontando para o MESMO init_point da preferência —
+  // mesma venda que o Wallet Brick, para não quebrar a automação do webhook.
+  const [qrPagamento, setQrPagamento] = useState<string | null>(null);
   // SDK do Mercado Pago (window.MercadoPago) disponível? Pode já estar pronto
   // no primeiro render, ou carregar depois (via <Script> em page.tsx).
   const [sdkPronto, setSdkPronto] = useState(
@@ -96,6 +99,30 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
     }
   }, [preferenceId, publicKey, lang, sdkPronto]);
 
+  // Gera o QR do link de pagamento assim que o init_point existe. Reusa a mesma
+  // biblioteca (`qrcode`) e API (`toDataURL`) do PDF de orçamento — sem nova
+  // dependência. Em try/catch: se o QR falhar, o botão Wallet segue funcionando.
+  useEffect(() => {
+    if (!initPoint) {
+      setQrPagamento(null);
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      try {
+        const QR = await import("qrcode");
+        const dataUrl = await QR.toDataURL(initPoint, { width: 220, margin: 1 });
+        if (!cancelado) setQrPagamento(dataUrl);
+      } catch (e) {
+        console.error("[checkout] erro ao gerar QR de pagamento:", e);
+        if (!cancelado) setQrPagamento(null);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [initPoint]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
@@ -151,6 +178,24 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
           >
             {t.botaoNaoApareceu}
           </a>
+        )}
+        {/* Complemento ao botão: QR do mesmo link de pagamento. Só desktop/tablet
+            (≥768px) via `md:` do Tailwind — em mobile fica oculto por CSS, sem
+            checagem de userAgent, evitando divergência de hidratação. */}
+        {qrPagamento && (
+          <div className="mt-5 hidden items-center gap-4 rounded-2xl border border-[rgba(120,160,230,0.18)] bg-[rgba(120,160,230,0.05)] p-4 md:flex">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={qrPagamento}
+              alt={t.qrAlt}
+              width={104}
+              height={104}
+              className="size-[104px] shrink-0 rounded-lg bg-white p-1.5"
+            />
+            <p className="text-sm leading-relaxed text-[#aab4c8]">
+              {t.qrLegenda}
+            </p>
+          </div>
         )}
       </div>
     );

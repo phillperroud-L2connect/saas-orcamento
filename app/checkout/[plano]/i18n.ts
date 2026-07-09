@@ -60,6 +60,8 @@ type Textos = {
   saudacao: string;
   finalizeAbaixo: string;
   botaoNaoApareceu: string;
+  qrLegenda: string;
+  qrAlt: string;
 };
 
 export const TEXTOS: Record<Lang, Textos> = {
@@ -101,6 +103,8 @@ export const TEXTOS: Record<Lang, Textos> = {
     saudacao: "Tudo certo, ",
     finalizeAbaixo: "Finalize o pagamento abaixo:",
     botaoNaoApareceu: "O botão não apareceu? Pagar pelo Mercado Pago →",
+    qrLegenda: "Ou escaneie para pagar pelo celular.",
+    qrAlt: "QR Code para pagar pelo celular",
   },
   es: {
     metaTitle: (nome) => `Contratar plan ${nome}`,
@@ -140,6 +144,8 @@ export const TEXTOS: Record<Lang, Textos> = {
     saudacao: "Todo listo, ",
     finalizeAbaixo: "Finalizá el pago abajo:",
     botaoNaoApareceu: "¿No apareció el botón? Pagar con Mercado Pago →",
+    qrLegenda: "O escaneá para pagar desde el celular.",
+    qrAlt: "Código QR para pagar desde el celular",
   },
 };
 
