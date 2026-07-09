@@ -122,6 +122,12 @@ export async function enviarLinkCadastro({
         <p style="color:#f59e0b;font-size:13px;line-height:1.6;margin:0 0 20px">
           ⏳ Este enlace expira en 24 horas.
         </p>
+        <p style="color:#cbd5e1;font-size:13px;line-height:1.6;margin:0 0 20px">
+          💡 Después de entrar, instalá la app en tu celular o computadora para
+          abrir el generador con un toque: en el menú del navegador elegí
+          <strong style="color:#3ea6ff">“Instalar app”</strong> o
+          <strong style="color:#3ea6ff">“Agregar a la pantalla de inicio”</strong>.
+        </p>
         <p style="color:#64748b;font-size:12px;line-height:1.6;margin:0 0 24px">
           Si el botón no funciona, copiá y pegá este enlace en tu navegador:<br>
           <span style="color:#3ea6ff;word-break:break-all">${linkCadastro}</span>
