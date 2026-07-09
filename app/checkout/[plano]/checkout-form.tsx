@@ -111,7 +111,7 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
     (async () => {
       try {
         const QR = await import("qrcode");
-        const dataUrl = await QR.toDataURL(initPoint, { width: 220, margin: 1 });
+        const dataUrl = await QR.toDataURL(initPoint, { width: 320, margin: 1 });
         if (!cancelado) setQrPagamento(dataUrl);
       } catch (e) {
         console.error("[checkout] erro ao gerar QR de pagamento:", e);
@@ -188,9 +188,9 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
             <img
               src={qrPagamento}
               alt={t.qrAlt}
-              width={104}
-              height={104}
-              className="size-[104px] shrink-0 rounded-lg bg-white p-1.5"
+              width={160}
+              height={160}
+              className="size-[160px] shrink-0 rounded-lg bg-white p-2"
             />
             <p className="text-sm leading-relaxed text-[#aab4c8]">
               {t.qrLegenda}
