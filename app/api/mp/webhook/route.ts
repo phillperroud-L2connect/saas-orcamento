@@ -83,17 +83,49 @@ export async function POST(req: Request) {
     }
 
     const meta = (payment.metadata ?? {}) as Record<string, unknown>;
-    const plano = getPlano(String(meta.plano ?? ""));
+
+    // Fallback: quando o pagador oculta os dados (hide_payer_information) ou o
+    // Mercado Pago não devolve `metadata`/`payer.email`, extraímos plano e
+    // e-mail do `external_reference` — gravado por nós na preferência no
+    // formato "<plano>:<email>" (ver app/api/mp/criar-preferencia). Isolado em
+    // try/catch para nunca derrubar o webhook por um formato inesperado.
+    let refPlano = "";
+    let refEmail = "";
+    try {
+      const ref = String(payment.external_reference ?? "");
+      const sep = ref.indexOf(":");
+      if (sep > 0) {
+        refPlano = ref.slice(0, sep).trim();
+        refEmail = ref.slice(sep + 1).trim();
+      }
+    } catch (refErr) {
+      console.error(
+        "[mp/webhook] falha ao parsear external_reference:",
+        refErr,
+      );
+    }
+
+    // Prioridade: metadata → payer → external_reference. `|| ...` (não `??`)
+    // porque metadata pode vir com string vazia, não só ausente.
+    const plano = getPlano(String(meta.plano ?? "").trim() || refPlano);
     const periodoMeta = String(meta.periodo ?? "");
     const periodo = isPeriodo(periodoMeta) ? periodoMeta : "mensal";
     const nome = String(meta.nome ?? payment.payer?.first_name ?? "").trim();
-    const email = String(meta.email ?? payment.payer?.email ?? "")
+    const email = (
+      String(meta.email ?? "").trim() ||
+      String(payment.payer?.email ?? "").trim() ||
+      refEmail
+    )
       .trim()
       .toLowerCase();
     const whatsapp = String(meta.whatsapp ?? "").trim() || null;
 
     if (!plano || !email) {
-      console.error("[mp/webhook] metadata incompleta", { paymentId, meta });
+      console.error("[mp/webhook] plano/e-mail ausentes (metadata + external_reference)", {
+        paymentId,
+        meta,
+        external_reference: payment.external_reference ?? null,
+      });
       return NextResponse.json({ erro: "metadata incompleta" }, { status: 200 });
     }
 

@@ -1,9 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
 import type { Periodo, PlanoId } from "@/lib/planos";
 import { TEXTOS, localeMercadoPago, type Lang } from "./i18n";
+
+/**
+ * Polling do status do pagamento (Etapa 2). A cada POLL_INTERVALO_MS a tela
+ * pergunta ao backend (/api/mp/status) se o pagamento já foi aprovado; ao
+ * aprovar, troca sozinha para o estado de sucesso e redireciona — sem depender
+ * do e-mail nem de o cliente atualizar a página. Após POLL_MAX_TENTATIVAS
+ * (≈10 min) o polling para e mostramos o aviso textual de fallback.
+ */
+const POLL_INTERVALO_MS = 4_000;
+const POLL_MAX_TENTATIVAS = 150;
+
+type PollStatus = "idle" | "aguardando" | "aprovado" | "timeout";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -42,6 +54,8 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
   // QR code (data URL PNG) apontando para o MESMO init_point da preferência —
   // mesma venda que o Wallet Brick, para não quebrar a automação do webhook.
   const [qrPagamento, setQrPagamento] = useState<string | null>(null);
+  // Estado do polling de confirmação do pagamento (ver POLL_* acima).
+  const [pollStatus, setPollStatus] = useState<PollStatus>("idle");
   // SDK do Mercado Pago (window.MercadoPago) disponível? Pode já estar pronto
   // no primeiro render, ou carregar depois (via <Script> em page.tsx).
   const [sdkPronto, setSdkPronto] = useState(
@@ -123,6 +137,58 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
     };
   }, [initPoint]);
 
+  // Polling do status do pagamento. Só roda na Etapa 2 (preferência criada).
+  // Para sozinho ao aprovar, ao esgotar as tentativas ou ao desmontar (o
+  // cleanup limpa o intervalo — "para o polling ao sair da página").
+  useEffect(() => {
+    if (!preferenceId) return;
+    const emailQ = email.trim();
+    if (!emailQ) return;
+
+    let tentativas = 0;
+    let parado = false;
+    let intervalo = 0;
+
+    const parar = () => {
+      parado = true;
+      if (intervalo) window.clearInterval(intervalo);
+    };
+
+    const verificar = async () => {
+      if (parado) return;
+      tentativas += 1;
+      try {
+        const res = await fetch(
+          `/api/mp/status?plano=${encodeURIComponent(plano)}&email=${encodeURIComponent(emailQ)}`,
+          { cache: "no-store" },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as { status?: string };
+          if (data.status === "approved") {
+            parar();
+            setPollStatus("aprovado");
+            // Pequena pausa para o cliente ver a confirmação antes do redirect.
+            window.setTimeout(() => {
+              window.location.href = "/checkout/sucesso";
+            }, 1500);
+            return;
+          }
+        }
+      } catch (e) {
+        // Erro de rede pontual não interrompe o polling — tenta de novo.
+        console.error("[checkout] erro ao consultar status do pagamento:", e);
+      }
+      if (!parado && tentativas >= POLL_MAX_TENTATIVAS) {
+        parar();
+        setPollStatus("timeout");
+      }
+    };
+
+    setPollStatus("aguardando");
+    intervalo = window.setInterval(verificar, POLL_INTERVALO_MS);
+    return parar;
+  }, [preferenceId, plano, email]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
@@ -161,6 +227,31 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
     }
   }
 
+  // Pagamento aprovado (detectado pelo polling): confirmação + redirect.
+  if (pollStatus === "aprovado") {
+    return (
+      <div className="mt-6 flex flex-col items-center gap-4 rounded-2xl border border-[rgba(74,222,128,0.30)] bg-[rgba(74,222,128,0.08)] px-6 py-10 text-center">
+        <div
+          className="grid size-16 place-items-center rounded-full"
+          style={{
+            background: "rgba(74,222,128,0.12)",
+            border: "1px solid rgba(74,222,128,0.35)",
+            boxShadow: "0 0 40px rgba(74,222,128,0.20)",
+          }}
+        >
+          <CheckCircle2 className="size-9" style={{ color: "#4ade80" }} />
+        </div>
+        <p className="text-lg font-medium text-[#e8edf7]">
+          {t.pagamentoConfirmado}
+        </p>
+        <p className="flex items-center gap-2 text-sm text-[#aab4c8]">
+          <Loader2 className="size-4 animate-spin" />
+          {t.redirecionando}
+        </p>
+      </div>
+    );
+  }
+
   // Etapa 2: preferência criada → mostra o botão de pagamento do Mercado Pago.
   if (preferenceId) {
     return (
@@ -196,6 +287,19 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
               {t.qrLegenda}
             </p>
           </div>
+        )}
+
+        {/* Feedback do polling: aguardando confirmação ou aviso de timeout. */}
+        {pollStatus === "aguardando" && (
+          <p className="mt-5 flex items-center justify-center gap-2 text-xs text-[#6a7490]">
+            <Loader2 className="size-3.5 animate-spin" />
+            {t.aguardandoPagamento}
+          </p>
+        )}
+        {pollStatus === "timeout" && (
+          <p className="mt-5 rounded-xl border border-[rgba(120,160,230,0.18)] bg-[rgba(120,160,230,0.05)] px-4 py-3 text-center text-xs leading-relaxed text-[#aab4c8]">
+            {t.pollTimeout}
+          </p>
         )}
       </div>
     );

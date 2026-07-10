@@ -44,11 +44,13 @@ function criarLimiter(max: number, janela: Parameters<typeof Ratelimit.slidingWi
  *  - cadastro: 10 / 5 min           (cria conta no Auth via token)
  *  - pagamento:20 / min             (cria preferência no Mercado Pago)
  *  - webhook: 120 / min             (generoso: rajadas legítimas do MP)
+ *  - status:   60 / min             (polling do checkout — 1 req a cada ~4s)
  */
 export const limiterLogin = criarLimiter(5, "1 m", "rl:login");
 export const limiterCadastro = criarLimiter(10, "5 m", "rl:cadastro");
 export const limiterPagamento = criarLimiter(20, "1 m", "rl:pagamento");
 export const limiterWebhook = criarLimiter(120, "1 m", "rl:webhook");
+export const limiterStatus = criarLimiter(60, "1 m", "rl:status");
 
 export type RateLimitResult = {
   ok: boolean;

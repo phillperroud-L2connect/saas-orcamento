@@ -62,6 +62,11 @@ type Textos = {
   botaoNaoApareceu: string;
   qrLegenda: string;
   qrAlt: string;
+
+  aguardandoPagamento: string;
+  pagamentoConfirmado: string;
+  redirecionando: string;
+  pollTimeout: string;
 };
 
 export const TEXTOS: Record<Lang, Textos> = {
@@ -105,6 +110,12 @@ export const TEXTOS: Record<Lang, Textos> = {
     botaoNaoApareceu: "O botão não apareceu? Pagar pelo Mercado Pago →",
     qrLegenda: "Ou escaneie para pagar pelo celular.",
     qrAlt: "QR Code para pagar pelo celular",
+
+    aguardandoPagamento: "Aguardando a confirmação do pagamento…",
+    pagamentoConfirmado: "Pagamento confirmado!",
+    redirecionando: "Redirecionando…",
+    pollTimeout:
+      "Ainda não recebemos a confirmação automática. Assim que o pagamento for aprovado, você receberá o link de acesso por e-mail — não é preciso pagar de novo.",
   },
   es: {
     metaTitle: (nome) => `Contratar plan ${nome}`,
@@ -146,6 +157,12 @@ export const TEXTOS: Record<Lang, Textos> = {
     botaoNaoApareceu: "¿No apareció el botón? Pagar con Mercado Pago →",
     qrLegenda: "O escaneá para pagar desde el celular.",
     qrAlt: "Código QR para pagar desde el celular",
+
+    aguardandoPagamento: "Esperando la confirmación del pago…",
+    pagamentoConfirmado: "¡Pago confirmado!",
+    redirecionando: "Redirigiendo…",
+    pollTimeout:
+      "Todavía no recibimos la confirmación automática. En cuanto se apruebe el pago, recibirás el enlace de acceso por correo — no hace falta pagar de nuevo.",
   },
 };
 
