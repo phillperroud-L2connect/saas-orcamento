@@ -60,6 +60,15 @@ export default function RootLayout({
             __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`,
           }}
         />
+        {/* Captura o evento de instalação do PWA o mais cedo possível (antes da
+            hidratação do React), evitando a corrida em que o beforeinstallprompt
+            dispara antes dos componentes montarem seus listeners. Apenas ARMAZENA
+            o evento — a instalação só é disparada pelo clique do usuário no botão. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{window.__l2Install=window.__l2Install||{evt:null,installed:false};window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__l2Install.evt=e;try{window.dispatchEvent(new Event('l2installready'));}catch(_){}});window.addEventListener('appinstalled',function(){window.__l2Install.evt=null;window.__l2Install.installed=true;});}catch(e){}})();`,
+          }}
+        />
         {children}
         <PwaManager />
       </body>

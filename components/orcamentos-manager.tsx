@@ -1163,8 +1163,15 @@ export function OrcamentosManager() {
               <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 {dict.orc.total}
               </span>
-              <span className="text-base font-bold" style={{ color: cor }}>
-                {fmt(total)}
+              {/* Total na cor da marca no tema claro; no escuro força cor clara
+                  legível (a cor da marca pode ser quase preta -> ilegível no dark). */}
+              <span className="text-base font-bold">
+                <span className="dark:hidden" style={{ color: cor }}>
+                  {fmt(total)}
+                </span>
+                <span className="hidden text-gray-100 dark:inline">
+                  {fmt(total)}
+                </span>
               </span>
             </div>
           </section>

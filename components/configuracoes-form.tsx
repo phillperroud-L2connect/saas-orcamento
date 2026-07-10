@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
-import type { Tenant } from "@/lib/types";
+import type { MoedaPreferida, Tenant } from "@/lib/types";
 
 /**
  * Rótulos da seção "Receber pagamentos" (inline pt/es — sem depender do
@@ -82,6 +82,12 @@ export function ConfiguracoesForm() {
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  // Nome do cabeçalho (tenant.nome_empresa) e moeda (tenant.moeda_preferida),
+  // ambos editáveis pelo cliente. moedaOriginalRef guarda o valor carregado para
+  // saber se a moeda mudou (e então recarregar a página para o i18n refletir).
+  const [nomeCabecalho, setNomeCabecalho] = useState("");
+  const [moedaPref, setMoedaPref] = useState<MoedaPreferida>("ARS");
+  const moedaOriginalRef = useRef<MoedaPreferida | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
@@ -129,6 +135,10 @@ export function ConfiguracoesForm() {
       setTenant(tt);
       setCorTexto(tt.cor_primaria || COR_PADRAO);
       setLogoUrl(tt.logo_url ?? null);
+      setNomeCabecalho(tt.nome_empresa ?? "");
+      const mp = (tt.moeda_preferida ?? "ARS") as MoedaPreferida;
+      setMoedaPref(mp);
+      moedaOriginalRef.current = mp;
     }
     setCarregando(false);
   }, [supabase]);
@@ -213,19 +223,49 @@ export function ConfiguracoesForm() {
     }
 
     setSalvando(true);
-    const { error } = await supabase
-      .from("tenants")
-      .update({ cor_primaria: hex })
-      .eq("id", tenantId);
-    setSalvando(false);
+    try {
+      const update: Record<string, unknown> = {
+        cor_primaria: hex,
+        nome_empresa: nomeCabecalho.trim(),
+      };
+      // Moeda só é editável em espanhol; em português o produto é sempre BRL.
+      if (idioma === "es") update.moeda_preferida = moedaPref;
 
-    if (error) {
-      console.error("[ConfiguracoesForm] erro ao salvar cor:", error);
+      const { error } = await supabase
+        .from("tenants")
+        .update(update)
+        .eq("id", tenantId);
+      if (error) {
+        console.error("[ConfiguracoesForm] erro ao salvar configurações:", error);
+        setErro(dict.cfg.erroSalvar);
+        return;
+      }
+
+      setCorTexto(hex);
+      setTenant((t) =>
+        t
+          ? {
+              ...t,
+              cor_primaria: hex,
+              nome_empresa: nomeCabecalho.trim(),
+              moeda_preferida: idioma === "es" ? moedaPref : t.moeda_preferida,
+            }
+          : t,
+      );
+
+      // Se a moeda mudou, recarrega para o i18n do app inteiro (fmt/símbolo)
+      // refletir a nova moeda. O provider só lê a moeda uma vez, na montagem.
+      if (idioma === "es" && moedaOriginalRef.current !== moedaPref) {
+        window.location.reload();
+        return;
+      }
+      setSalvo(true);
+    } catch (e) {
+      console.error("[ConfiguracoesForm] exceção ao salvar configurações:", e);
       setErro(dict.cfg.erroSalvar);
-      return;
+    } finally {
+      setSalvando(false);
     }
-    setCorTexto(hex);
-    setSalvo(true);
   }
 
   // Lê o resultado do retorno OAuth (?mp=ok|erro) e limpa a URL.
@@ -324,15 +364,41 @@ export function ConfiguracoesForm() {
         </p>
       </div>
 
-      {/* Idioma e moeda (somente leitura — definidos pelo admin) */}
-      <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-          {dict.cfg.regional}
-        </h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          {dict.cfg.regionalDesc}
-        </p>
+      {/* Cabeçalho do orçamento (nome + moeda editáveis; idioma só leitura) */}
+      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {dict.cfg.regional}
+          </h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {dict.cfg.regionalDesc}
+          </p>
+        </div>
+
+        {/* Nome que aparece no cabeçalho do orçamento (grava em nome_empresa) */}
+        <div>
+          <label htmlFor="nome_cabecalho" className={labelCls}>
+            {dict.cfg.nomeCabecalho}
+          </label>
+          <input
+            id="nome_cabecalho"
+            className={inputCls}
+            value={nomeCabecalho}
+            onChange={(e) => {
+              setNomeCabecalho(e.target.value);
+              setSalvo(false);
+            }}
+            placeholder={dict.cfg.nomeCabecalhoPlaceholder}
+            maxLength={80}
+            autoComplete="off"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {dict.cfg.nomeCabecalhoDesc}
+          </p>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
+          {/* Idioma — somente leitura (definido no cadastro) */}
           <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700">
             <div className="text-xs text-gray-500 dark:text-gray-400">
               {dict.cfg.idiomaLabel}
@@ -341,13 +407,30 @@ export function ConfiguracoesForm() {
               {dict.cfg.idiomaNome}
             </div>
           </div>
-          <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700">
-            <div className="text-xs text-gray-500 dark:text-gray-400">
+
+          {/* Moeda — editável (ARS/USD) em espanhol; BRL fixo em português */}
+          <div>
+            <label htmlFor="moeda_pref" className={labelCls}>
               {dict.cfg.moedaLabel}
-            </div>
-            <div className="mt-0.5 text-sm font-medium text-gray-900 dark:text-gray-100">
-              {moeda} ({simbolo})
-            </div>
+            </label>
+            {idioma === "es" ? (
+              <select
+                id="moeda_pref"
+                className={inputCls}
+                value={moedaPref}
+                onChange={(e) => {
+                  setMoedaPref(e.target.value as MoedaPreferida);
+                  setSalvo(false);
+                }}
+              >
+                <option value="ARS">{dict.cfg.moedaArs}</option>
+                <option value="USD">{dict.cfg.moedaUsd}</option>
+              </select>
+            ) : (
+              <div className="rounded-lg border border-gray-200 px-4 py-3 text-sm font-medium text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                {moeda} ({simbolo})
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -608,7 +691,7 @@ export function ConfiguracoesForm() {
             ? dict.common.salvando
             : salvo
             ? dict.common.salvo
-            : dict.cfg.salvarCor}
+            : dict.common.salvar}
         </button>
       </div>
     </div>

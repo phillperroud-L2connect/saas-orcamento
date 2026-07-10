@@ -10,6 +10,12 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+declare global {
+  interface Window {
+    __l2Install?: { evt: BeforeInstallPromptEvent | null; installed: boolean };
+  }
+}
+
 /**
  * Botão de destaque que dispara o prompt nativo de instalação do PWA.
  * Captura o evento `beforeinstallprompt` por conta própria (não depende do
@@ -29,34 +35,56 @@ export default function InstalarAppButton() {
   }, []);
 
   useEffect(() => {
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    // Lê o evento já capturado pelo script global do layout raiz (que roda antes
+    // da hidratação e evita a corrida em que o beforeinstallprompt é perdido).
+    try {
+      const g = window.__l2Install;
+      if (g?.installed) setInstalado(true);
+      else if (g?.evt) setDeferredPrompt(g.evt);
+    } catch (err) {
+      console.warn("[pwa] falha ao ler prompt de instalação:", err);
+    }
+    // Caso o evento chegue depois da montagem, o script global emite 'l2installready'.
+    const onReady = () => {
+      try {
+        const g = window.__l2Install;
+        if (g?.evt) setDeferredPrompt(g.evt);
+      } catch (err) {
+        console.warn("[pwa] falha no l2installready:", err);
+      }
     };
     const onInstalled = () => {
       setDeferredPrompt(null);
       setInstalado(true);
     };
-    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("l2installready", onReady);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
-      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("l2installready", onReady);
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
 
   async function handleInstalar() {
+    // A instalação SÓ acontece a partir daqui — sempre exige o clique do usuário.
     if (!deferredPrompt) {
-      // Sem prompt nativo (iOS/Safari ou já instalado): mostra o passo a passo.
+      // Sem prompt nativo (iOS/Safari, heurística ainda não liberou, ou já
+      // instalado): mostra o passo a passo manual — sempre há reação visível.
       setMostrarManual(true);
       return;
     }
     setInstalando(true);
-    await deferredPrompt.prompt();
-    const escolha = await deferredPrompt.userChoice;
-    if (escolha.outcome === "accepted") setInstalado(true);
-    setDeferredPrompt(null);
-    setInstalando(false);
+    try {
+      await deferredPrompt.prompt();
+      const escolha = await deferredPrompt.userChoice;
+      if (escolha.outcome === "accepted") setInstalado(true);
+    } catch (err) {
+      console.warn("[pwa] falha ao disparar a instalação:", err);
+      setMostrarManual(true);
+    } finally {
+      setDeferredPrompt(null);
+      setInstalando(false);
+    }
   }
 
   return (
