@@ -11,7 +11,7 @@ export function GET() {
     short_name: "Orçamentos",
     description:
       "Crie e gerencie orçamentos profissionais de forma rápida e simples.",
-    start_url: "/",
+    start_url: "/login",
     scope: "/",
     display: "standalone",
     orientation: "portrait-primary",
