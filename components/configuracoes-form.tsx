@@ -14,6 +14,10 @@ import {
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
 import type { MoedaPreferida, Tenant } from "@/lib/types";
+import {
+  validarArquivoLogo,
+  LOGO_MIME_PERMITIDOS,
+} from "@/lib/upload-validation";
 
 /**
  * Rótulos da seção "Receber pagamentos" (inline pt/es — sem depender do
@@ -154,13 +158,15 @@ export function ConfiguracoesForm() {
     setErro(null);
     setLogoSalvo(false);
 
-    if (!file.type.startsWith("image/")) {
-      setErro(dict.cfg.erroLogoImagem);
-      e.target.value = "";
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      setErro(dict.cfg.erroLogoTamanho);
+    // Validação (client). O enforcement final também é feito no servidor pela
+    // restrição de MIME/tamanho do bucket "logos" no Supabase Storage.
+    const validacao = validarArquivoLogo(file);
+    if (!validacao.ok) {
+      setErro(
+        validacao.motivo === "tamanho"
+          ? dict.cfg.erroLogoTamanho
+          : dict.cfg.erroLogoImagem,
+      );
       e.target.value = "";
       return;
     }
@@ -171,7 +177,8 @@ export function ConfiguracoesForm() {
 
     setEnviandoLogo(true);
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+    // Extensão derivada do MIME validado (não confia no nome do arquivo).
+    const ext = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
     const path = `${tenantId}/${crypto.randomUUID()}.${ext}`;
 
     const { error: upErr } = await supabase.storage
@@ -489,7 +496,7 @@ export function ConfiguracoesForm() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg"
+            accept={LOGO_MIME_PERMITIDOS.join(",")}
             className="hidden"
             onChange={handleLogoUpload}
           />

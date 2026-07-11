@@ -51,6 +51,10 @@ export const limiterCadastro = criarLimiter(10, "5 m", "rl:cadastro");
 export const limiterPagamento = criarLimiter(20, "1 m", "rl:pagamento");
 export const limiterWebhook = criarLimiter(120, "1 m", "rl:webhook");
 export const limiterStatus = criarLimiter(60, "1 m", "rl:status");
+// oauth do prestador (conectar conta MP) e ações administrativas destrutivas:
+// baixo volume legítimo, 20/min por IP protege contra abuso sem atrapalhar.
+export const limiterOauth = criarLimiter(20, "1 m", "rl:oauth");
+export const limiterAdmin = criarLimiter(20, "1 m", "rl:admin");
 
 export type RateLimitResult = {
   ok: boolean;

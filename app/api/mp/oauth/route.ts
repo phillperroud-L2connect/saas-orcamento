@@ -5,6 +5,12 @@ import {
   buscarEmailContaMp,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
+import {
+  aplicarRateLimit,
+  limiterOauth,
+  getClientIp,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 /**
  * /api/mp/oauth — conexão da conta Mercado Pago do PRESTADOR (OAuth).
@@ -56,6 +62,9 @@ async function conectar(code: string, state: string) {
 
 /** POST — chamado server-side pela página de configurações. Body: {code,state}. */
 export async function POST(req: Request) {
+  const rl = await aplicarRateLimit(limiterOauth, `oauth:${getClientIp(req)}`);
+  if (!rl.ok) return tooManyRequests(rl.retryAfter);
+
   let body: { code?: string; state?: string };
   try {
     body = await req.json();
@@ -82,6 +91,15 @@ export async function GET(req: Request) {
   const code = searchParams.get("code") ?? "";
   const state = searchParams.get("state") ?? "";
   const destino = `${getMpRedirectUri()}`;
+
+  // Rate limit: em excesso, redireciona com mp=erro (preserva a UX do callback
+  // em vez de devolver um 429 cru no meio do fluxo de conexão).
+  const rl = await aplicarRateLimit(limiterOauth, `oauth:${getClientIp(req)}`);
+  if (!rl.ok) {
+    const url = new URL(destino);
+    url.searchParams.set("mp", "erro");
+    return NextResponse.redirect(url);
+  }
 
   try {
     const r = await conectar(code, state);

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { Preference } from "mercadopago";
 import { getMercadoPagoClient, getSiteUrl } from "@/lib/mercadopago";
 import { getPlano, getPrecoPorPeriodo, isPeriodo } from "@/lib/planos";
+import {
+  aplicarRateLimit,
+  limiterPagamento,
+  getClientIp,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 /**
  * POST /api/mp/criar-preferencia
@@ -14,6 +20,11 @@ import { getPlano, getPrecoPorPeriodo, isPeriodo } from "@/lib/planos";
  * quando o pagamento é efetivamente aprovado.
  */
 export async function POST(req: Request) {
+  // Rate limit por IP: cria preferência de pagamento no MP (mesmo limite do
+  // pagamento de orçamento). Protege o checkout público contra abuso.
+  const rl = await aplicarRateLimit(limiterPagamento, `criar-pref:${getClientIp(req)}`);
+  if (!rl.ok) return tooManyRequests(rl.retryAfter);
+
   let body: {
     plano?: string;
     periodo?: string;

@@ -3,6 +3,12 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { isAdminUser } from "@/lib/admin";
 import { withTimeout } from "@/lib/async";
+import {
+  aplicarRateLimit,
+  limiterAdmin,
+  getClientIp,
+  tooManyRequests,
+} from "@/lib/rate-limit";
 
 const DB_TIMEOUT_MS = 8_000;
 
@@ -29,6 +35,10 @@ export async function POST(req: NextRequest) {
   if (!isAdminUser(user)) {
     return NextResponse.json({ erro: "nao_autorizado" }, { status: 403 });
   }
+
+  // Rate limit da ação destrutiva (após confirmar que é o admin logado).
+  const rl = await aplicarRateLimit(limiterAdmin, `excluir-tenant:${getClientIp(req)}`);
+  if (!rl.ok) return tooManyRequests(rl.retryAfter);
 
   let body: { tenantId?: string } = {};
   try {

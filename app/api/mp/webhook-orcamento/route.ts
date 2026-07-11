@@ -14,6 +14,8 @@ import {
   getClientIp,
   tooManyRequests,
 } from "@/lib/rate-limit";
+import { registrarEventoPagamento } from "@/lib/payment-audit";
+import { mapStatusParaEvento } from "@/lib/payment-audit-core";
 
 /**
  * POST /api/mp/webhook-orcamento?tenant=...&orcamento=...
@@ -79,6 +81,18 @@ export async function POST(req: Request) {
     const payment = await new Payment(
       getMercadoPagoClientFor(tenant.mp_access_token),
     ).get({ id: paymentId });
+
+    // Trilha de auditoria (best-effort): evento recebido com o tenant do
+    // prestador e o orçamento referenciado. Não bloqueia o webhook.
+    await registrarEventoPagamento({
+      evento: mapStatusParaEvento(payment.status),
+      origem: "orcamento",
+      tenantId,
+      mpPaymentId: payment.id,
+      externalReference: payment.external_reference ?? orcamentoQuery ?? null,
+      status: payment.status ?? null,
+      valor: payment.transaction_amount ?? null,
+    });
 
     if (payment.status !== "approved") {
       return NextResponse.json({ status: payment.status }, { status: 200 });

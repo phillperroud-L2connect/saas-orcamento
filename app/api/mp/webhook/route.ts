@@ -15,6 +15,8 @@ import {
   tooManyRequests,
 } from "@/lib/rate-limit";
 import { withTimeout } from "@/lib/async";
+import { registrarEventoPagamento } from "@/lib/payment-audit";
+import { mapStatusParaEvento } from "@/lib/payment-audit-core";
 
 /** Watchdogs para as chamadas de rede/DB do webhook (ms). */
 const MP_TIMEOUT_MS = 10_000;
@@ -76,6 +78,17 @@ export async function POST(req: Request) {
       MP_TIMEOUT_MS,
       "consultar pagamento no Mercado Pago",
     );
+
+    // Trilha de auditoria (best-effort): registra o evento recebido com o
+    // status atual, antes de qualquer provisionamento. Não bloqueia o webhook.
+    await registrarEventoPagamento({
+      evento: mapStatusParaEvento(payment.status),
+      origem: "assinatura",
+      mpPaymentId: payment.id,
+      externalReference: payment.external_reference ?? null,
+      status: payment.status ?? null,
+      valor: payment.transaction_amount ?? null,
+    });
 
     if (payment.status !== "approved") {
       // Pendente/recusado: nada a provisionar ainda.
@@ -213,6 +226,18 @@ export async function POST(req: Request) {
           renovErr,
         );
       }
+
+      // Auditoria enriquecida com o tenant da renovação (best-effort).
+      await registrarEventoPagamento({
+        evento: "aprovado",
+        origem: "assinatura",
+        tenantId: tenantExistente.id,
+        mpPaymentId: payment.id,
+        externalReference: payment.external_reference ?? null,
+        status: payment.status ?? null,
+        valor: payment.transaction_amount ?? plano.preco,
+        detalhe: { renovacao: true, plano: plano.id, periodo },
+      });
 
       await Promise.allSettled([
         withTimeout(
