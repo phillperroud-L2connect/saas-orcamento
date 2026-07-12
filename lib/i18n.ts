@@ -282,6 +282,7 @@ const pt = {
     aReceber: "A receber",
     recebido: "Recebido",
     recebidoMes: "Recebido no mês",
+    recebidoPeriodo: "Recebido no período",
     totalRegistros: (n: number) =>
       `${n} ${n === 1 ? "pagamento" : "pagamentos"}`,
     deOrcamentos: "Pagamentos de orçamentos",
@@ -598,6 +599,7 @@ const es: Dict = {
     aReceber: "Por cobrar",
     recebido: "Cobrado",
     recebidoMes: "Cobrado en el mes",
+    recebidoPeriodo: "Cobrado en el período",
     totalRegistros: (n: number) => `${n} ${n === 1 ? "pago" : "pagos"}`,
     deOrcamentos: "Pagos de presupuestos",
     deOrcamentosSub:

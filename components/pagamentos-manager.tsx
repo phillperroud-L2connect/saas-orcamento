@@ -15,7 +15,6 @@ import { useI18n } from "@/components/i18n-provider";
 import { fmtMoeda } from "@/lib/moeda";
 import type { MoedaPreferida } from "@/lib/types";
 import {
-  chaveMes,
   chavesDoPeriodo,
   PERIODO_PADRAO,
   type PeriodoKey,
@@ -316,27 +315,29 @@ export function PagamentosManager() {
     setProcessando(null);
   }
 
-  // ---- Resumo (a receber / recebido / recebido no mês) ----
+  // ---- Resumo (a receber / recebido no período / total recebido) ----
   //
-  // "A receber" e "Recebido" seguem o período selecionado (mesma fonte de dados,
-  // só muda a janela de meses considerada). "Recebido no mês" é sempre o mês
-  // corrente — é um KPI fixo do mês, independente do filtro.
+  // Os três cards acompanham o período selecionado (mesma fonte de dados, só
+  // muda a janela de meses):
+  //  - aReceber       → pendente com referência dentro do período
+  //  - recebidoPeriodo→ pago com referência dentro do período (card "no período")
+  //  - recebidoTotal  → total pago de todos os tempos (âncora de referência,
+  //                     mantém o card "Cobrado" distinto do card do período)
   const resumo = useMemo(() => {
     try {
       const chaves = chavesDoPeriodo(periodo);
-      const chaveMesAtual = chaveMes(new Date());
       const mesDe = (iso: string) => iso.slice(0, 7);
 
       let aReceber = 0;
-      let recebido = 0;
-      let recebidoMes = 0;
+      let recebidoPeriodo = 0;
+      let recebidoTotal = 0;
 
       for (const o of orcamentos) {
         const v = num(o.total);
         const ref = mesDe(o.created_at);
         if (o.status === "aprovado") {
-          if (chaves.has(ref)) recebido += v;
-          if (ref === chaveMesAtual) recebidoMes += v;
+          recebidoTotal += v;
+          if (chaves.has(ref)) recebidoPeriodo += v;
         } else if (chaves.has(ref)) {
           aReceber += v;
         }
@@ -345,21 +346,23 @@ export function PagamentosManager() {
         const v = num(a.valor);
         if (a.status === "pago") {
           const ref = mesDe(a.data_pagamento ?? a.created_at);
-          if (chaves.has(ref)) recebido += v;
-          if (ref === chaveMesAtual) recebidoMes += v;
+          recebidoTotal += v;
+          if (chaves.has(ref)) recebidoPeriodo += v;
         } else {
           const ref = mesDe(a.data_vencimento ?? a.created_at);
           if (chaves.has(ref)) aReceber += v;
         }
       }
-      return { aReceber, recebido, recebidoMes };
+      return { aReceber, recebidoPeriodo, recebidoTotal };
     } catch (e) {
       console.error("[PagamentosManager] falha ao calcular resumo:", e);
-      return { aReceber: 0, recebido: 0, recebidoMes: 0 };
+      return { aReceber: 0, recebidoPeriodo: 0, recebidoTotal: 0 };
     }
   }, [orcamentos, avulsos, periodo]);
 
   const totalRegistros = orcamentos.length + avulsos.length;
+  const ehMes = periodo === "mes";
+  const periodoLabel = dict.common.periodo.opcoes[periodo];
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-8">
@@ -409,21 +412,21 @@ export function PagamentosManager() {
             {t.recebido}
           </div>
           <div className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            {fmt(resumo.recebido)}
+            {fmt(resumo.recebidoTotal)}
           </div>
           <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-            {t.recebidoMes}: {fmt(resumo.recebidoMes)}
+            {periodoLabel}: {fmt(resumo.recebidoPeriodo)}
           </div>
         </div>
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            {t.recebidoMes}
+            {ehMes ? t.recebidoMes : t.recebidoPeriodo}
           </div>
           <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {fmt(resumo.recebidoMes)}
+            {fmt(resumo.recebidoPeriodo)}
           </div>
           <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-            {t.recebido}: {fmt(resumo.recebido)}
+            {t.recebido}: {fmt(resumo.recebidoTotal)}
           </div>
         </div>
       </div>
