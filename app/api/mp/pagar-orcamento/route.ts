@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Preference } from "mercadopago";
 import { getMercadoPagoClientFor, getSiteUrl } from "@/lib/mercadopago";
+import { normalizarPais } from "@/lib/mp-paises";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import {
   aplicarRateLimit,
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("mp_access_token, nome_empresa")
+    .select("mp_access_token, nome_empresa, pais")
     .eq("id", orc.tenant_id)
     .maybeSingle();
 
@@ -95,7 +96,9 @@ export async function POST(req: Request) {
         ...(ehLocalhost ? {} : { auto_return: "approved" as const }),
         // tenant/orcamento na URL: o webhook precisa do token do prestador
         // (que criou o pagamento) para consultá-lo na API do Mercado Pago.
-        notification_url: `${siteUrl}/api/mp/webhook-orcamento?tenant=${orc.tenant_id}&orcamento=${orc.id}`,
+        // `pais` seleciona a gaveta do secret que valida a assinatura do webhook
+        // (a app AR ou BR que intermediou a conexão OAuth do prestador).
+        notification_url: `${siteUrl}/api/mp/webhook-orcamento?tenant=${orc.tenant_id}&orcamento=${orc.id}&pais=${normalizarPais(tenant.pais)}`,
       },
     });
 

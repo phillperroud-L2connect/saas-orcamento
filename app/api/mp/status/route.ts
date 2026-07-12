@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getMercadoPagoClient } from "@/lib/mercadopago";
 import { Payment } from "mercadopago";
 import { isPlanoId } from "@/lib/planos";
+import { normalizarPais } from "@/lib/mp-paises";
 import {
   aplicarRateLimit,
   limiterStatus,
@@ -33,6 +34,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const plano = (searchParams.get("plano") ?? "").trim();
   const email = (searchParams.get("email") ?? "").trim();
+  // País da conta em que buscar o pagamento (default "AR" p/ fluxo legado).
+  const pais = normalizarPais(searchParams.get("pais"));
 
   // Rate limit por IP: o polling roda a cada ~4s (≈15/min); 60/min dá folga
   // para múltiplas abas. Ao exceder, respondemos "pending" (não 429) para o
@@ -50,7 +53,7 @@ export async function GET(req: Request) {
   const externalReference = `${plano}:${email}`;
 
   try {
-    const payment = new Payment(getMercadoPagoClient());
+    const payment = new Payment(getMercadoPagoClient(pais));
     const busca = await withTimeout(
       payment.search({
         options: {

@@ -5,6 +5,7 @@ import {
   verificarAssinaturaMpWebhook,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
+import { normalizarPais } from "@/lib/mp-paises";
 import { notificarPrestadorPagamento } from "@/lib/email";
 import { fmtMoeda } from "@/lib/moeda";
 import type { MoedaPreferida } from "@/lib/types";
@@ -51,9 +52,12 @@ export async function POST(req: Request) {
     searchParams.get("data.id") ?? searchParams.get("id") ?? bodyJson.data?.id;
   const tenantId = searchParams.get("tenant");
   const orcamentoQuery = searchParams.get("orcamento");
+  // País (gravado no notification_url) → gaveta do secret que valida a
+  // assinatura. Default "AR" preserva as conexões legadas sem o parâmetro.
+  const pais = normalizarPais(searchParams.get("pais"));
 
   // Autenticidade: rejeita requisições sem assinatura válida do Mercado Pago.
-  const assinatura = verificarAssinaturaMpWebhook(req, paymentId ?? null);
+  const assinatura = verificarAssinaturaMpWebhook(req, paymentId ?? null, pais);
   if (!assinatura.ok) {
     console.warn("[mp/webhook-orcamento] assinatura rejeitada:", assinatura.motivo);
     return NextResponse.json({ erro: "assinatura_invalida" }, { status: 401 });

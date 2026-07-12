@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Script from "next/script";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
-import { getPlano } from "@/lib/planos";
+import { getPlano, paisDoIdioma } from "@/lib/planos";
 import { CheckoutPanel } from "./checkout-panel";
 import { TEXTOS, resolverLang } from "./i18n";
 
@@ -46,6 +46,14 @@ export default function CheckoutPage({ params, searchParams }: Props) {
   if (!plano) notFound();
 
   const lang = resolverLang(searchParams?.lang);
+  // País da assinatura deriva do idioma do checkout (es → AR, pt → BR). Define a
+  // gaveta de credenciais: a public key do Wallet Brick precisa ser da MESMA
+  // conta (AR/BR) em que a preferência é criada em /api/mp/criar-preferencia.
+  const pais = paisDoIdioma(lang);
+  const publicKey =
+    pais === "BR"
+      ? process.env.NEXT_PUBLIC_MP_PUBLIC_KEY_BR ?? ""
+      : process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ?? "";
 
   return (
     <main
@@ -77,7 +85,8 @@ export default function CheckoutPage({ params, searchParams }: Props) {
       <CheckoutPanel
         plano={plano}
         lang={lang}
-        publicKey={process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ?? ""}
+        pais={pais}
+        publicKey={publicKey}
       />
     </main>
   );

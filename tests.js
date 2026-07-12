@@ -20,6 +20,16 @@ import {
   construirRegistroAuditoria,
 } from "./lib/payment-audit-core.js";
 
+import {
+  normalizarPais,
+  moedaAssinatura,
+  idiomaDoPais,
+  paisDoIdioma,
+  authDomainMp,
+  precoAssinatura,
+  PRECOS_ASSINATURA,
+} from "./lib/mp-paises.js";
+
 const KB = 1024;
 
 // ---------------------------------------------------------------------------
@@ -160,4 +170,93 @@ test("construirRegistroAuditoria: entrada vazia ainda produz registro válido", 
   assert.equal(r.evento, "status_desconhecido");
   assert.equal(r.valor, null);
   assert.deepEqual(r.detalhe, {});
+});
+
+// ---------------------------------------------------------------------------
+// Multi-país Mercado Pago (AR / BR) — seleção país → gaveta → moeda → preço
+// ---------------------------------------------------------------------------
+
+test("normalizarPais: aceita AR e BR (inclusive minúsculas e com espaços)", () => {
+  assert.equal(normalizarPais("BR"), "BR");
+  assert.equal(normalizarPais("AR"), "AR");
+  assert.equal(normalizarPais("br"), "BR");
+  assert.equal(normalizarPais("  ar  "), "AR");
+});
+
+test("normalizarPais: valor desconhecido/nulo cai no default AR (fluxo legado)", () => {
+  assert.equal(normalizarPais("US"), "AR");
+  assert.equal(normalizarPais(""), "AR");
+  assert.equal(normalizarPais(null), "AR");
+  assert.equal(normalizarPais(undefined), "AR");
+});
+
+test("normalizarPais: default customizável para BR quando desejado", () => {
+  assert.equal(normalizarPais(null, "BR"), "BR");
+  assert.equal(normalizarPais("xx", "BR"), "BR");
+  // Um valor válido sempre vence o default informado.
+  assert.equal(normalizarPais("AR", "BR"), "AR");
+});
+
+test("moedaAssinatura: BR → BRL, AR → ARS, desconhecido → ARS", () => {
+  assert.equal(moedaAssinatura("BR"), "BRL");
+  assert.equal(moedaAssinatura("AR"), "ARS");
+  assert.equal(moedaAssinatura("zz"), "ARS");
+});
+
+test("idiomaDoPais: BR → pt, AR → es", () => {
+  assert.equal(idiomaDoPais("BR"), "pt");
+  assert.equal(idiomaDoPais("AR"), "es");
+});
+
+test("paisDoIdioma: pt → BR, es → AR, desconhecido → AR", () => {
+  assert.equal(paisDoIdioma("pt"), "BR");
+  assert.equal(paisDoIdioma("es"), "AR");
+  assert.equal(paisDoIdioma("en"), "AR");
+});
+
+test("authDomainMp: domínio de autorização correto por país", () => {
+  assert.equal(authDomainMp("BR"), "auth.mercadopago.com.br");
+  assert.equal(authDomainMp("AR"), "auth.mercadopago.com.ar");
+  // Default seguro para valor inesperado.
+  assert.equal(authDomainMp("xx"), "auth.mercadopago.com.ar");
+});
+
+test("precoAssinatura BR: valores em BRL definidos pelo cliente", () => {
+  assert.equal(precoAssinatura("basico", "mensal", "BR"), 29.9);
+  assert.equal(precoAssinatura("basico", "anual", "BR"), 299.0);
+  assert.equal(precoAssinatura("pro", "mensal", "BR"), 38.89);
+  assert.equal(precoAssinatura("pro", "anual", "BR"), 388.9);
+});
+
+test("precoAssinatura AR: valores em ARS preservados (sem regressão)", () => {
+  assert.equal(precoAssinatura("basico", "mensal", "AR"), 11980);
+  assert.equal(precoAssinatura("basico", "anual", "AR"), 119800);
+  assert.equal(precoAssinatura("pro", "mensal", "AR"), 19850);
+  assert.equal(precoAssinatura("pro", "anual", "AR"), 198500);
+});
+
+test("precoAssinatura: promoção anual = 10 mensalidades (2 meses grátis) nos 2 países", () => {
+  for (const pais of ["AR", "BR"]) {
+    for (const plano of ["basico", "pro"]) {
+      const mensal = precoAssinatura(plano, "mensal", pais);
+      const anual = precoAssinatura(plano, "anual", pais);
+      // Tolerância de centavos para evitar ruído de ponto flutuante.
+      assert.ok(
+        Math.abs(anual - mensal * 10) < 0.01,
+        `${plano}/${pais}: anual (${anual}) deveria ser 10× mensal (${mensal})`,
+      );
+    }
+  }
+});
+
+test("precoAssinatura: país ausente usa AR (default) e plano desconhecido → null", () => {
+  assert.equal(precoAssinatura("basico", "mensal"), 11980);
+  assert.equal(precoAssinatura("inexistente", "mensal", "BR"), null);
+});
+
+test("PRECOS_ASSINATURA: cobre os dois planos nos dois países", () => {
+  for (const plano of ["basico", "pro"]) {
+    assert.ok(PRECOS_ASSINATURA[plano].AR, `${plano} precisa de preço AR`);
+    assert.ok(PRECOS_ASSINATURA[plano].BR, `${plano} precisa de preço BR`);
+  }
 });

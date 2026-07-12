@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import type { Periodo, PlanoId } from "@/lib/planos";
+import type { Pais } from "@/lib/types";
 import { TEXTOS, localeMercadoPago, type Lang } from "./i18n";
 
 /**
@@ -28,6 +29,7 @@ type Props = {
   plano: PlanoId;
   periodo: Periodo;
   lang: Lang;
+  pais: Pais;
   publicKey: string;
 };
 
@@ -40,7 +42,7 @@ const labelCls = "mb-1.5 block text-xs font-medium text-[#aab4c8]";
  * /api/mp/criar-preferencia e renderiza o Wallet Brick do Mercado Pago
  * (botão oficial de pagamento) usando a NEXT_PUBLIC_MP_PUBLIC_KEY.
  */
-export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
+export function CheckoutForm({ plano, periodo, lang, pais, publicKey }: Props) {
   const t = TEXTOS[lang];
 
   const [nome, setNome] = useState("");
@@ -159,7 +161,7 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
       tentativas += 1;
       try {
         const res = await fetch(
-          `/api/mp/status?plano=${encodeURIComponent(plano)}&email=${encodeURIComponent(emailQ)}`,
+          `/api/mp/status?plano=${encodeURIComponent(plano)}&email=${encodeURIComponent(emailQ)}&pais=${encodeURIComponent(pais)}`,
           { cache: "no-store" },
         );
         if (res.ok) {
@@ -187,7 +189,7 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
     setPollStatus("aguardando");
     intervalo = window.setInterval(verificar, POLL_INTERVALO_MS);
     return parar;
-  }, [preferenceId, plano, email]);
+  }, [preferenceId, plano, email, pais]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -206,6 +208,7 @@ export function CheckoutForm({ plano, periodo, lang, publicKey }: Props) {
         body: JSON.stringify({
           plano,
           periodo,
+          pais,
           nome: nome.trim(),
           email: email.trim(),
           whatsapp: whatsapp.trim(),

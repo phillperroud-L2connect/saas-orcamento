@@ -14,6 +14,7 @@ import {
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
 import type { MoedaPreferida, Tenant } from "@/lib/types";
+import { normalizarPais, authDomainMp } from "@/lib/mp-paises";
 import {
   validarArquivoLogo,
   LOGO_MIME_PERMITIDOS,
@@ -298,9 +299,17 @@ export function ConfiguracoesForm() {
       setErro(dict.orc.erroTenant);
       return;
     }
-    const clientId = process.env.NEXT_PUBLIC_MP_CLIENT_ID;
+    // Gaveta OAuth conforme o país do tenant: aplicação/domínio AR ou BR. O
+    // redirect_uri é idêntico nos dois (a página de configurações); o webhook
+    // /api/mp/oauth escolhe o client_secret pelo país ao trocar o código.
+    const pais = normalizarPais(tenant?.pais);
+    const clientId =
+      pais === "BR"
+        ? process.env.NEXT_PUBLIC_MP_CLIENT_ID_BR
+        : process.env.NEXT_PUBLIC_MP_CLIENT_ID;
     if (!clientId) {
-      setErro("NEXT_PUBLIC_MP_CLIENT_ID não configurado.");
+      const sufixo = pais === "BR" ? "_BR" : "";
+      setErro(`NEXT_PUBLIC_MP_CLIENT_ID${sufixo} não configurado.`);
       return;
     }
     const site = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
@@ -313,7 +322,7 @@ export function ConfiguracoesForm() {
       redirect_uri: redirectUri,
     });
     setConectandoMp(true);
-    window.location.href = `https://auth.mercadopago.com.ar/authorization?${params.toString()}`;
+    window.location.href = `https://${authDomainMp(pais)}/authorization?${params.toString()}`;
   }
 
   /** Desconecta a conta MP do prestador: limpa as colunas mp_* do tenant. */

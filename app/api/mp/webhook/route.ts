@@ -6,7 +6,8 @@ import {
   verificarAssinaturaMpWebhook,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
-import { getPlano, isPeriodo } from "@/lib/planos";
+import { getPlano, getPrecoPorPeriodo, isPeriodo } from "@/lib/planos";
+import { normalizarPais } from "@/lib/mp-paises";
 import { enviarLinkCadastro, notificarAdminNovaVenda } from "@/lib/email";
 import {
   aplicarRateLimit,
@@ -58,10 +59,14 @@ export async function POST(req: Request) {
   const tipo = searchParams.get("type") ?? searchParams.get("topic") ?? bodyJson.type;
   const paymentId =
     searchParams.get("data.id") ?? searchParams.get("id") ?? bodyJson.data?.id;
+  // País da conta gravado no notification_url (?pais=AR|BR) ao criar a
+  // preferência. Determina em qual gaveta de credenciais consultar o pagamento
+  // — cada conta MP só enxerga os próprios pagamentos. Default "AR" (legado).
+  const pais = normalizarPais(searchParams.get("pais"));
 
   // Autenticidade: rejeita qualquer requisição que não venha do Mercado Pago
   // (assinatura x-signature inválida/ausente ou secret não configurada).
-  const assinatura = verificarAssinaturaMpWebhook(req, paymentId ?? null);
+  const assinatura = verificarAssinaturaMpWebhook(req, paymentId ?? null, pais);
   if (!assinatura.ok) {
     console.warn("[mp/webhook] assinatura rejeitada:", assinatura.motivo);
     return NextResponse.json({ erro: "assinatura_invalida" }, { status: 401 });
@@ -74,7 +79,7 @@ export async function POST(req: Request) {
 
   try {
     const payment = await withTimeout(
-      new Payment(getMercadoPagoClient()).get({ id: paymentId }),
+      new Payment(getMercadoPagoClient(pais)).get({ id: paymentId }),
       MP_TIMEOUT_MS,
       "consultar pagamento no Mercado Pago",
     );
@@ -171,7 +176,7 @@ export async function POST(req: Request) {
         nome: nome || null,
         email,
         whatsapp,
-        valor: payment.transaction_amount ?? plano.preco,
+        valor: payment.transaction_amount ?? getPrecoPorPeriodo(plano, periodo, pais),
         status: payment.status,
         forma_pagamento: "mercado_pago",
         tenant_id: tenantExistente?.id ?? null,
@@ -235,13 +240,13 @@ export async function POST(req: Request) {
         mpPaymentId: payment.id,
         externalReference: payment.external_reference ?? null,
         status: payment.status ?? null,
-        valor: payment.transaction_amount ?? plano.preco,
+        valor: payment.transaction_amount ?? getPrecoPorPeriodo(plano, periodo, pais),
         detalhe: { renovacao: true, plano: plano.id, periodo },
       });
 
       await Promise.allSettled([
         withTimeout(
-          notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano }),
+          notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano, periodo, pais }),
           EMAIL_TIMEOUT_MS,
           "e-mail notificar admin (renovação)",
         ),
@@ -262,6 +267,9 @@ export async function POST(req: Request) {
         token,
         plano: plano.id,
         periodo,
+        // País carregado até o provisionamento: define pais/idioma/moeda do
+        // tenant em /api/cadastro/token (AR → es/ARS, BR → pt/BRL).
+        pais,
         expira_em: expiraEm.toISOString(),
       }),
       DB_TIMEOUT_MS,
@@ -283,7 +291,7 @@ export async function POST(req: Request) {
         "e-mail link de cadastro",
       ),
       withTimeout(
-        notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano }),
+        notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano, periodo, pais }),
         EMAIL_TIMEOUT_MS,
         "e-mail notificar admin",
       ),

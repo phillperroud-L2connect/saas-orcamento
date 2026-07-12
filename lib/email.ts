@@ -1,5 +1,11 @@
 import { Resend } from "resend";
-import type { Plano } from "@/lib/planos";
+import {
+  formatarPreco,
+  getPrecoPorPeriodo,
+  type Periodo,
+  type Plano,
+} from "@/lib/planos";
+import type { Pais } from "@/lib/types";
 
 /**
  * Camada de e-mail transacional via Resend.
@@ -158,6 +164,9 @@ type NotificacaoAdminParams = {
   email: string;
   whatsapp?: string | null;
   plano: Plano;
+  /** Período/país da venda para exibir o valor na moeda certa (default AR/mensal). */
+  periodo?: Periodo;
+  pais?: Pais;
 };
 
 /** Notifica o painel admin (por e-mail) sobre uma nova venda confirmada. */
@@ -166,6 +175,8 @@ export async function notificarAdminNovaVenda({
   email,
   whatsapp,
   plano,
+  periodo = "mensal",
+  pais = "AR",
 }: NotificacaoAdminParams): Promise<void> {
   const resend = getResend();
   if (!resend) return;
@@ -174,7 +185,7 @@ export async function notificarAdminNovaVenda({
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#171717">
     <h2 style="font-size:18px;margin:0 0 12px">🟢 Nova venda confirmada</h2>
     <table style="font-size:14px;color:#333;border-collapse:collapse">
-      <tr><td style="padding:4px 12px 4px 0;color:#888">Plano</td><td><strong>${escapeHtml(plano.nome)}</strong> (${plano.moeda} ${plano.preco})</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#888">Plano</td><td><strong>${escapeHtml(plano.nome)}</strong> (${escapeHtml(formatarPreco(getPrecoPorPeriodo(plano, periodo, pais), pais))} / ${periodo})</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#888">Cliente</td><td>${escapeHtml(nome)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#888">E-mail</td><td>${escapeHtml(email)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#888">WhatsApp</td><td>${escapeHtml(whatsapp ?? "—")}</td></tr>

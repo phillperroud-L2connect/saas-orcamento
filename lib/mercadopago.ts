@@ -1,5 +1,7 @@
 import { MercadoPagoConfig } from "mercadopago";
 import crypto from "node:crypto";
+import type { Pais } from "./types";
+import { normalizarPais, authDomainMp } from "./mp-paises";
 
 /* ===========================================================================
  * Validação da assinatura do webhook (x-signature)
@@ -26,8 +28,14 @@ export type ResultadoAssinatura = { ok: boolean; motivo?: string };
 export function verificarAssinaturaMpWebhook(
   req: Request,
   dataId: string | null,
+  pais: Pais = "AR",
 ): ResultadoAssinatura {
-  const secret = process.env.MP_WEBHOOK_SECRET;
+  // Cada aplicação (AR/BR) assina seus webhooks com a própria "Assinatura
+  // secreta". Escolhe a gaveta conforme o país; default "AR" preserva o legado.
+  const secret =
+    normalizarPais(pais) === "BR"
+      ? process.env.MP_WEBHOOK_SECRET_BR
+      : process.env.MP_WEBHOOK_SECRET;
   if (!secret) return { ok: false, motivo: "secret_ausente" };
 
   const xSignature = req.headers.get("x-signature");
@@ -61,15 +69,21 @@ export function verificarAssinaturaMpWebhook(
 }
 
 /**
- * Configuração do SDK do Mercado Pago (conta da Argentina).
+ * Configuração do SDK do Mercado Pago da conta do DONO do SaaS (recebe as
+ * assinaturas), escolhendo a "gaveta" de credenciais conforme o país:
+ *   - AR → MP_ACCESS_TOKEN           (conta/aplicação Argentina)
+ *   - BR → MP_ACCESS_TOKEN_BR        (conta/aplicação Brasil)
  *
- * Usa o MP_ACCESS_TOKEN (privado, server-side). A NEXT_PUBLIC_MP_PUBLIC_KEY é
- * usada apenas no browser (Wallet Brick) e não entra aqui.
+ * `pais` default "AR" preserva o comportamento dos chamadores legados. A public
+ * key (NEXT_PUBLIC_MP_PUBLIC_KEY[_BR]) é usada só no browser (Wallet Brick).
  */
-export function getMercadoPagoClient(): MercadoPagoConfig {
-  const accessToken = process.env.MP_ACCESS_TOKEN;
+export function getMercadoPagoClient(pais: Pais = "AR"): MercadoPagoConfig {
+  const p = normalizarPais(pais);
+  const accessToken =
+    p === "BR" ? process.env.MP_ACCESS_TOKEN_BR : process.env.MP_ACCESS_TOKEN;
   if (!accessToken) {
-    throw new Error("MP_ACCESS_TOKEN não definido no .env.local.");
+    const varNome = p === "BR" ? "MP_ACCESS_TOKEN_BR" : "MP_ACCESS_TOKEN";
+    throw new Error(`${varNome} não definido no .env.local.`);
   }
   return new MercadoPagoConfig({
     accessToken,
@@ -105,27 +119,51 @@ export function getMpRedirectUri(): string {
   return `${getSiteUrl()}/dashboard/configuracoes`;
 }
 
-/** Credenciais da aplicação (client_id público + client_secret server-side). */
-export function getMpOAuthCredentials(): { clientId: string; clientSecret: string } {
-  const clientId = process.env.NEXT_PUBLIC_MP_CLIENT_ID;
-  const clientSecret = process.env.MP_CLIENT_SECRET;
+/**
+ * Credenciais da aplicação OAuth (client_id público + client_secret server-side),
+ * escolhendo a gaveta conforme o país:
+ *   - AR → NEXT_PUBLIC_MP_CLIENT_ID  / MP_CLIENT_SECRET     (aplicação Argentina)
+ *   - BR → NEXT_PUBLIC_MP_CLIENT_ID_BR / MP_CLIENT_SECRET_BR (aplicação Brasil)
+ */
+export function getMpOAuthCredentials(pais: Pais = "AR"): {
+  clientId: string;
+  clientSecret: string;
+} {
+  const p = normalizarPais(pais);
+  const clientId =
+    p === "BR"
+      ? process.env.NEXT_PUBLIC_MP_CLIENT_ID_BR
+      : process.env.NEXT_PUBLIC_MP_CLIENT_ID;
+  const clientSecret =
+    p === "BR" ? process.env.MP_CLIENT_SECRET_BR : process.env.MP_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
+    const sufixo = p === "BR" ? "_BR" : "";
     throw new Error(
-      "OAuth do Mercado Pago indisponível: defina NEXT_PUBLIC_MP_CLIENT_ID e MP_CLIENT_SECRET no .env.local.",
+      `OAuth do Mercado Pago (${p}) indisponível: defina NEXT_PUBLIC_MP_CLIENT_ID${sufixo} e MP_CLIENT_SECRET${sufixo} no .env.local.`,
     );
   }
   return { clientId, clientSecret };
 }
 
 /**
- * Monta a URL de autorização do Mercado Pago (Argentina). O `state` correlaciona
- * o retorno ao tenant que iniciou a conexão. Pode rodar no client (usa apenas o
- * client_id público + redirect_uri).
+ * Monta a URL de autorização do Mercado Pago para o país informado (domínio
+ * .com.ar ou .com.br + client_id da aplicação correspondente). O `state`
+ * correlaciona o retorno ao tenant que iniciou a conexão. Server-side (usa a
+ * gaveta correta); o botão no client monta a URL equivalente com a public var.
  */
-export function buildMpAuthorizationUrl(state: string, redirectUri: string): string {
-  const clientId = process.env.NEXT_PUBLIC_MP_CLIENT_ID;
+export function buildMpAuthorizationUrl(
+  state: string,
+  redirectUri: string,
+  pais: Pais = "AR",
+): string {
+  const p = normalizarPais(pais);
+  const clientId =
+    p === "BR"
+      ? process.env.NEXT_PUBLIC_MP_CLIENT_ID_BR
+      : process.env.NEXT_PUBLIC_MP_CLIENT_ID;
   if (!clientId) {
-    throw new Error("NEXT_PUBLIC_MP_CLIENT_ID não definido no .env.local.");
+    const sufixo = p === "BR" ? "_BR" : "";
+    throw new Error(`NEXT_PUBLIC_MP_CLIENT_ID${sufixo} não definido no .env.local.`);
   }
   const params = new URLSearchParams({
     client_id: clientId,
@@ -134,7 +172,7 @@ export function buildMpAuthorizationUrl(state: string, redirectUri: string): str
     state,
     redirect_uri: redirectUri,
   });
-  return `https://auth.mercadopago.com.ar/authorization?${params.toString()}`;
+  return `https://${authDomainMp(p)}/authorization?${params.toString()}`;
 }
 
 /** Resposta do endpoint de token OAuth do Mercado Pago. */
@@ -154,8 +192,9 @@ export type MpOAuthToken = {
 export async function trocarCodigoMpPorToken(
   code: string,
   redirectUri: string,
+  pais: Pais = "AR",
 ): Promise<MpOAuthToken> {
-  const { clientId, clientSecret } = getMpOAuthCredentials();
+  const { clientId, clientSecret } = getMpOAuthCredentials(pais);
 
   const res = await fetch("https://api.mercadopago.com/oauth/token", {
     method: "POST",

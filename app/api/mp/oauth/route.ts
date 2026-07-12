@@ -5,6 +5,7 @@ import {
   buscarEmailContaMp,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
+import { normalizarPais } from "@/lib/mp-paises";
 import {
   aplicarRateLimit,
   limiterOauth,
@@ -34,14 +35,24 @@ async function conectar(code: string, state: string) {
     return { ok: false as const, status: 400, erro: "code/state ausentes." };
   }
 
-  // 1. Troca o código pelo access_token da conta do prestador.
-  const token = await trocarCodigoMpPorToken(code, getMpRedirectUri());
+  const supabase = createServiceSupabase();
+
+  // 0. País do tenant → gaveta OAuth (client_secret AR ou BR) usada na troca.
+  //    Default "AR" preserva o fluxo legado se a coluna vier nula.
+  const { data: tenantPais } = await supabase
+    .from("tenants")
+    .select("pais")
+    .eq("id", tenantId)
+    .maybeSingle();
+  const pais = normalizarPais(tenantPais?.pais);
+
+  // 1. Troca o código pelo access_token da conta do prestador (gaveta do país).
+  const token = await trocarCodigoMpPorToken(code, getMpRedirectUri(), pais);
 
   // 2. Descobre o e-mail da conta conectada (best-effort, só para exibição).
   const email = await buscarEmailContaMp(token.access_token);
 
   // 3. Salva no tenant (service role — ignora RLS).
-  const supabase = createServiceSupabase();
   const { error } = await supabase
     .from("tenants")
     .update({

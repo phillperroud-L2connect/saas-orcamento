@@ -3,17 +3,20 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import {
-  formatarPrecoARS,
+  formatarPreco,
   getPrecoPorPeriodo,
+  equivalenteMensalAnual,
   type Periodo,
   type Plano,
 } from "@/lib/planos";
+import type { Pais } from "@/lib/types";
 import { CheckoutForm } from "./checkout-form";
 import { TEXTOS, getPlanoTextos, type Lang } from "./i18n";
 
 type Props = {
   plano: Plano;
   lang: Lang;
+  pais: Pais;
   publicKey: string;
 };
 
@@ -22,16 +25,16 @@ type Props = {
  * para que ele controle, ao mesmo tempo, o preço exibido no resumo e o valor
  * enviado ao Mercado Pago pelo formulário.
  */
-export function CheckoutPanel({ plano, lang, publicKey }: Props) {
+export function CheckoutPanel({ plano, lang, pais, publicKey }: Props) {
   const [periodo, setPeriodo] = useState<Periodo>("mensal");
 
   const t = TEXTOS[lang];
   const planoTextos = getPlanoTextos(plano.id, lang);
 
-  const preco = getPrecoPorPeriodo(plano, periodo);
+  const preco = getPrecoPorPeriodo(plano, periodo, pais);
   const ehAnual = periodo === "anual";
   // Anual = 10 meses (2 grátis). Equivalente mensal para reforçar a economia.
-  const equivalenteMensal = Math.round(plano.precoAnual / 12);
+  const equivalenteMensal = equivalenteMensalAnual(plano, pais);
 
   return (
     <div className="relative mx-auto grid max-w-5xl gap-10 px-5 py-12 lg:grid-cols-[1.1fr_1fr] lg:py-20">
@@ -109,7 +112,7 @@ export function CheckoutPanel({ plano, lang, publicKey }: Props) {
         {/* ------------------------------ Preço ----------------------------- */}
         <div className="mt-8 flex items-end gap-2">
           <span className="text-5xl font-medium tracking-tight text-[#e8edf7]">
-            {formatarPrecoARS(preco)}
+            {formatarPreco(preco, pais)}
           </span>
           <span className="mb-1.5 text-sm text-[#6a7490]">
             {ehAnual ? t.porAno : t.porMes}
@@ -117,7 +120,7 @@ export function CheckoutPanel({ plano, lang, publicKey }: Props) {
         </div>
         {ehAnual && (
           <p className="mt-2 text-xs text-[#6ee0ff]">
-            {t.equivalente(formatarPrecoARS(equivalenteMensal))}
+            {t.equivalente(formatarPreco(equivalenteMensal, pais))}
           </p>
         )}
 
@@ -150,6 +153,7 @@ export function CheckoutPanel({ plano, lang, publicKey }: Props) {
             plano={plano.id}
             periodo={periodo}
             lang={lang}
+            pais={pais}
             publicKey={publicKey}
           />
         </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { getPlano, isPeriodo, type Periodo } from "@/lib/planos";
+import { normalizarPais, idiomaDoPais, moedaAssinatura } from "@/lib/mp-paises";
 import {
   aplicarRateLimit,
   limiterCadastro,
@@ -29,6 +30,7 @@ type TokenRow = {
   email: string;
   plano: string;
   periodo: string | null;
+  pais: string | null;
   usado: boolean;
   expira_em: string;
 };
@@ -42,7 +44,7 @@ async function carregarToken(
 
   const { data, error } = await supabase
     .from("onboarding_tokens")
-    .select("id, email, plano, periodo, usado, expira_em")
+    .select("id, email, plano, periodo, pais, usado, expira_em")
     .eq("token", token)
     .maybeSingle();
 
@@ -146,12 +148,16 @@ export async function POST(req: Request) {
     const venc = new Date();
     venc.setMonth(venc.getMonth() + (periodo === "anual" ? 12 : 1));
 
+    // País do token → região/idioma/moeda do tenant (AR → es/ARS, BR → pt/BRL).
+    // Default "AR" preserva o provisionamento legado para tokens antigos sem país.
+    const pais = normalizarPais(row.pais);
+
     await supabase
       .from("tenants")
       .update({
-        pais: "AR",
-        idioma: "es",
-        moeda_preferida: "ARS",
+        pais,
+        idioma: idiomaDoPais(pais),
+        moeda_preferida: moedaAssinatura(pais),
         plano: plano.id,
         ativo: true,
         status_assinatura: "pago",

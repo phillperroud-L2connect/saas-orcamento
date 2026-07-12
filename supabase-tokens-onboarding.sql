@@ -28,6 +28,10 @@ create table if not exists public.onboarding_tokens (
   -- Periodicidade contratada — define o vencimento na criação da conta
   -- (+1 mês para 'mensal', +12 meses para 'anual').
   periodo     text not null default 'mensal' check (periodo in ('mensal', 'anual')),
+  -- País da conta que assinou — carrega até o provisionamento em
+  -- /api/cadastro/token, definindo pais/idioma/moeda do tenant (AR → es/ARS,
+  -- BR → pt/BRL). Default 'AR' preserva o comportamento legado.
+  pais        text not null default 'AR' check (pais in ('AR', 'BR')),
   usado       boolean not null default false,
   criado_em   timestamptz not null default now(),
   -- Expira 24h após a criação. Validado também na aplicação.
@@ -38,6 +42,12 @@ create table if not exists public.onboarding_tokens (
 alter table public.onboarding_tokens
   add column if not exists periodo text not null default 'mensal'
     check (periodo in ('mensal', 'anual'));
+
+-- Migração para bancos que já tinham a tabela antes da coluna `pais` (multi-país
+-- AR/BR). Default 'AR' marca tokens legados como argentinos, sem quebrar dados.
+alter table public.onboarding_tokens
+  add column if not exists pais text not null default 'AR'
+    check (pais in ('AR', 'BR'));
 
 create index if not exists idx_onboarding_tokens_token on public.onboarding_tokens (token);
 create index if not exists idx_onboarding_tokens_email on public.onboarding_tokens (email);

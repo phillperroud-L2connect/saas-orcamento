@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { Preference } from "mercadopago";
 import { getMercadoPagoClient, getSiteUrl } from "@/lib/mercadopago";
-import { getPlano, getPrecoPorPeriodo, isPeriodo } from "@/lib/planos";
+import {
+  getPlano,
+  getPrecoPorPeriodo,
+  isPeriodo,
+  moedaAssinatura,
+} from "@/lib/planos";
+import { normalizarPais } from "@/lib/mp-paises";
 import {
   aplicarRateLimit,
   limiterPagamento,
@@ -28,6 +34,7 @@ export async function POST(req: Request) {
   let body: {
     plano?: string;
     periodo?: string;
+    pais?: string;
     nome?: string;
     email?: string;
     whatsapp?: string;
@@ -42,6 +49,9 @@ export async function POST(req: Request) {
   const plano = getPlano(body.plano ?? "");
   // Período opcional — default "mensal" caso o cliente não envie/envie inválido.
   const periodo = isPeriodo(body.periodo ?? "") ? (body.periodo as "mensal" | "anual") : "mensal";
+  // País da conta que está assinando (deriva do idioma do checkout no client).
+  // Fora de {AR,BR} → "AR" (preserva o fluxo argentino como default seguro).
+  const pais = normalizarPais(body.pais);
   const nome = body.nome?.trim() ?? "";
   const email = body.email?.trim() ?? "";
   const whatsapp = body.whatsapp?.trim() ?? "";
@@ -62,12 +72,14 @@ export async function POST(req: Request) {
   const siteUrl = getSiteUrl();
   const ehLocalhost = siteUrl.includes("localhost") || siteUrl.includes("127.0.0.1");
 
-  // Valor cobrado conforme o período escolhido (mensal x anual).
-  const unitPrice = getPrecoPorPeriodo(plano, periodo);
+  // Valor + moeda conforme o país e o período escolhido (AR→ARS, BR→BRL).
+  const unitPrice = getPrecoPorPeriodo(plano, periodo, pais);
+  const moeda = moedaAssinatura(pais);
   const sufixoPeriodo = periodo === "anual" ? "Anual" : "Mensal";
 
   try {
-    const preference = new Preference(getMercadoPagoClient());
+    // Gaveta de credenciais conforme o país (conta AR ou BR do dono do SaaS).
+    const preference = new Preference(getMercadoPagoClient(pais));
 
     const result = await preference.create({
       body: {
@@ -78,7 +90,7 @@ export async function POST(req: Request) {
             description: plano.descricao,
             quantity: 1,
             unit_price: unitPrice,
-            currency_id: "ARS",
+            currency_id: moeda,
           },
         ],
         payer: {
@@ -89,6 +101,7 @@ export async function POST(req: Request) {
         metadata: {
           plano: plano.id,
           periodo,
+          pais,
           nome,
           email,
           whatsapp,
@@ -102,7 +115,9 @@ export async function POST(req: Request) {
         },
         // auto_return exige back_urls https — só ativa fora do localhost.
         ...(ehLocalhost ? {} : { auto_return: "approved" as const }),
-        notification_url: `${siteUrl}/api/mp/webhook`,
+        // `pais` na query: o webhook precisa saber em qual conta (AR/BR)
+        // consultar o pagamento — cada conta só enxerga os próprios pagamentos.
+        notification_url: `${siteUrl}/api/mp/webhook?pais=${pais}`,
       },
     });
 
