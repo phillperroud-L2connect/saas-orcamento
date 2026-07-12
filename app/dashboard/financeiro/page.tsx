@@ -5,6 +5,14 @@ import { getDict } from "@/lib/i18n";
 import { fmtData, fmtMoeda, moedaDoTenant } from "@/lib/moeda";
 import type { Idioma, MoedaPreferida } from "@/lib/types";
 import {
+  chaveMes,
+  chavesDoPeriodo,
+  chavesPeriodoAnterior,
+  mesesDoPeriodo,
+  normalizarPeriodo,
+} from "@/lib/periodo";
+import { PeriodoSelectNav } from "@/components/periodo-selector";
+import {
   FaturamentoChart,
   type PontoFaturamento,
 } from "@/components/faturamento-chart";
@@ -35,12 +43,12 @@ const STATUS_CLS: Record<OrcamentoRow["status"], string> = {
   arquivado: "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400",
 };
 
-/** Chave AAAA-MM para agrupar por mês independente de fuso. */
-function chaveMes(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-export default async function FinanceiroPage() {
+export default async function FinanceiroPage({
+  searchParams,
+}: {
+  searchParams?: { periodo?: string };
+}) {
+  const periodo = normalizarPeriodo(searchParams?.periodo);
   const supabase = createServerSupabase();
 
   const {
@@ -107,53 +115,73 @@ export default async function FinanceiroPage() {
   const aprovadosArr = orcamentos.filter((o) => o.status === "aprovado");
   const recusadosArr = orcamentos.filter((o) => o.status === "recusado");
 
+  // Agregações da janela selecionada. A fonte de dados é sempre a mesma (todos
+  // os orçamentos do tenant); o período apenas decide quais meses entram.
   const agora = new Date();
-  const chaveAtual = chaveMes(agora);
-  const chaveAnterior = chaveMes(
-    new Date(agora.getFullYear(), agora.getMonth() - 1, 1),
-  );
+  let faturadoPeriodoAtual = 0;
+  let faturadoPeriodoAnterior = 0;
+  let aprovadosPeriodo: OrcamentoRow[] = [];
+  let recusadosPeriodo: OrcamentoRow[] = [];
+  let serie: PontoFaturamento[] = [];
 
-  const faturadoMesAtual = aprovadosArr
-    .filter((o) => chaveMes(new Date(o.created_at)) === chaveAtual)
-    .reduce((s, o) => s + num(o.total), 0);
+  try {
+    const chavesAtual = chavesDoPeriodo(periodo, agora);
+    const chavesAnterior = chavesPeriodoAnterior(periodo, agora);
+    const noPeriodo = (o: OrcamentoRow, chaves: Set<string>) =>
+      chaves.has(chaveMes(new Date(o.created_at)));
 
-  const faturadoMesAnterior = aprovadosArr
-    .filter((o) => chaveMes(new Date(o.created_at)) === chaveAnterior)
-    .reduce((s, o) => s + num(o.total), 0);
+    aprovadosPeriodo = aprovadosArr.filter((o) => noPeriodo(o, chavesAtual));
+    recusadosPeriodo = recusadosArr.filter((o) => noPeriodo(o, chavesAtual));
 
-  const totalAprovado = aprovadosArr.reduce((s, o) => s + num(o.total), 0);
+    faturadoPeriodoAtual = aprovadosPeriodo.reduce((s, o) => s + num(o.total), 0);
+    faturadoPeriodoAnterior = aprovadosArr
+      .filter((o) => noPeriodo(o, chavesAnterior))
+      .reduce((s, o) => s + num(o.total), 0);
+
+    // Série de barras: um ponto por mês do período (do mais antigo ao atual).
+    serie = mesesDoPeriodo(periodo, agora).map((m) => ({
+      mes: `${dict.fin.meses[m.mes]}/${String(m.ano).slice(2)}`,
+      total: aprovadosArr
+        .filter((o) => chaveMes(new Date(o.created_at)) === m.chave)
+        .reduce((s, o) => s + num(o.total), 0),
+    }));
+  } catch (e) {
+    console.error("[FinanceiroPage] falha ao agregar período:", e);
+    // Fallback seguro: mantém a tela funcional mesmo se o cálculo falhar.
+    aprovadosPeriodo = aprovadosArr;
+    recusadosPeriodo = recusadosArr;
+    faturadoPeriodoAtual = aprovadosArr.reduce((s, o) => s + num(o.total), 0);
+    serie = [];
+  }
+
+  const totalAprovadoPeriodo = faturadoPeriodoAtual;
   const ticketMedio =
-    aprovadosArr.length > 0 ? totalAprovado / aprovadosArr.length : 0;
+    aprovadosPeriodo.length > 0
+      ? totalAprovadoPeriodo / aprovadosPeriodo.length
+      : 0;
 
-  // Variação percentual do faturamento mês atual vs anterior.
+  // Variação percentual: período atual vs período anterior de mesmo tamanho.
   const variacao =
-    faturadoMesAnterior > 0
-      ? ((faturadoMesAtual - faturadoMesAnterior) / faturadoMesAnterior) * 100
+    faturadoPeriodoAnterior > 0
+      ? ((faturadoPeriodoAtual - faturadoPeriodoAnterior) /
+          faturadoPeriodoAnterior) *
+        100
       : null;
 
-  // Série dos últimos 6 meses (inclui o mês atual), faturamento aprovado por mês.
-  const serie: PontoFaturamento[] = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(agora.getFullYear(), agora.getMonth() - (5 - i), 1);
-    const chave = chaveMes(d);
-    const total = aprovadosArr
-      .filter((o) => chaveMes(new Date(o.created_at)) === chave)
-      .reduce((s, o) => s + num(o.total), 0);
-    return {
-      mes: `${dict.fin.meses[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
-      total,
-    };
-  });
+  const ehMes = periodo === "mes";
 
   const ultimos = orcamentos.slice(0, 10);
 
   const cards = [
     {
-      titulo: dict.fin.faturadoMes,
-      valor: fmt(faturadoMesAtual),
+      titulo: ehMes ? dict.fin.faturadoMes : dict.fin.faturadoPeriodo,
+      valor: fmt(faturadoPeriodoAtual),
       sub:
         variacao === null
-          ? dict.fin.semBase
-          : dict.fin.vsMesAnterior(
+          ? ehMes
+            ? dict.fin.semBase
+            : dict.fin.semBasePeriodo
+          : (ehMes ? dict.fin.vsMesAnterior : dict.fin.vsPeriodoAnterior)(
               Number(Math.abs(variacao).toFixed(0)),
               variacao >= 0,
             ),
@@ -166,8 +194,8 @@ export default async function FinanceiroPage() {
       destaque: true,
     },
     {
-      titulo: dict.fin.mesAnterior,
-      valor: fmt(faturadoMesAnterior),
+      titulo: ehMes ? dict.fin.mesAnterior : dict.fin.periodoAnterior,
+      valor: fmt(faturadoPeriodoAnterior),
       sub: dict.fin.faturamentoAprovado,
       subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
@@ -175,13 +203,13 @@ export default async function FinanceiroPage() {
     {
       titulo: dict.fin.ticketMedio,
       valor: fmt(ticketMedio),
-      sub: dict.fin.orcAprovados(aprovadosArr.length),
+      sub: dict.fin.orcAprovados(aprovadosPeriodo.length),
       subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
     },
     {
       titulo: dict.fin.aprovadosVsRecusados,
-      valor: `${aprovadosArr.length} / ${recusadosArr.length}`,
+      valor: `${aprovadosPeriodo.length} / ${recusadosPeriodo.length}`,
       sub: dict.fin.aprovadosRecusadosSub,
       subCls: "text-gray-400 dark:text-gray-500",
       destaque: false,
@@ -201,13 +229,20 @@ export default async function FinanceiroPage() {
               {dict.fin.subtitulo}
             </p>
           </div>
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
-            <ArrowLeft className="size-4" />
-            {dict.common.voltar}
-          </Link>
+          <div className="flex items-center gap-2">
+            <PeriodoSelectNav
+              value={periodo}
+              label={dict.common.periodo.label}
+              opcoes={dict.common.periodo.opcoes}
+            />
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <ArrowLeft className="size-4" />
+              {dict.common.voltar}
+            </Link>
+          </div>
         </div>
 
         {/* Cards de resumo */}
@@ -246,7 +281,7 @@ export default async function FinanceiroPage() {
         <section className="mt-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
           <div className="mb-4 flex items-baseline justify-between">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {dict.fin.faturamento6m}
+              {`${dict.fin.faturamento} — ${dict.common.periodo.opcoes[periodo]}`}
             </h2>
             <span className="text-xs text-gray-400 dark:text-gray-500">
               {dict.fin.orcAprovadosLabel}
@@ -256,7 +291,7 @@ export default async function FinanceiroPage() {
             dados={serie}
             moeda={moeda}
             labelFaturado={dict.fin.faturado}
-            labelVazio={dict.fin.semFaturamento}
+            labelVazio={dict.fin.semFaturamentoPeriodo}
           />
         </section>
 

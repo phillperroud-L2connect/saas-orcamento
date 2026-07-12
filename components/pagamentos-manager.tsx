@@ -14,6 +14,13 @@ import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
 import { fmtMoeda } from "@/lib/moeda";
 import type { MoedaPreferida } from "@/lib/types";
+import {
+  chaveMes,
+  chavesDoPeriodo,
+  PERIODO_PADRAO,
+  type PeriodoKey,
+} from "@/lib/periodo";
+import { PeriodoSelect } from "@/components/periodo-selector";
 
 /**
  * Aba "Pagamentos" — controle de recebimentos do tenant.
@@ -100,6 +107,7 @@ export function PagamentosManager() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [processando, setProcessando] = useState<string | null>(null);
+  const [periodo, setPeriodo] = useState<PeriodoKey>(PERIODO_PADRAO);
 
   // Formulário de pagamento avulso (criação/edição inline).
   const [formAberto, setFormAberto] = useState(false);
@@ -309,34 +317,47 @@ export function PagamentosManager() {
   }
 
   // ---- Resumo (a receber / recebido / recebido no mês) ----
+  //
+  // "A receber" e "Recebido" seguem o período selecionado (mesma fonte de dados,
+  // só muda a janela de meses considerada). "Recebido no mês" é sempre o mês
+  // corrente — é um KPI fixo do mês, independente do filtro.
   const resumo = useMemo(() => {
-    const chaveMesAtual = hoje().slice(0, 7); // AAAA-MM
+    try {
+      const chaves = chavesDoPeriodo(periodo);
+      const chaveMesAtual = chaveMes(new Date());
+      const mesDe = (iso: string) => iso.slice(0, 7);
 
-    let aReceber = 0;
-    let recebido = 0;
-    let recebidoMes = 0;
+      let aReceber = 0;
+      let recebido = 0;
+      let recebidoMes = 0;
 
-    for (const o of orcamentos) {
-      const v = num(o.total);
-      if (o.status === "aprovado") {
-        recebido += v;
-        if (o.created_at.slice(0, 7) === chaveMesAtual) recebidoMes += v;
-      } else {
-        aReceber += v;
+      for (const o of orcamentos) {
+        const v = num(o.total);
+        const ref = mesDe(o.created_at);
+        if (o.status === "aprovado") {
+          if (chaves.has(ref)) recebido += v;
+          if (ref === chaveMesAtual) recebidoMes += v;
+        } else if (chaves.has(ref)) {
+          aReceber += v;
+        }
       }
-    }
-    for (const a of avulsos) {
-      const v = num(a.valor);
-      if (a.status === "pago") {
-        recebido += v;
-        const ref = (a.data_pagamento ?? a.created_at).slice(0, 7);
-        if (ref === chaveMesAtual) recebidoMes += v;
-      } else {
-        aReceber += v;
+      for (const a of avulsos) {
+        const v = num(a.valor);
+        if (a.status === "pago") {
+          const ref = mesDe(a.data_pagamento ?? a.created_at);
+          if (chaves.has(ref)) recebido += v;
+          if (ref === chaveMesAtual) recebidoMes += v;
+        } else {
+          const ref = mesDe(a.data_vencimento ?? a.created_at);
+          if (chaves.has(ref)) aReceber += v;
+        }
       }
+      return { aReceber, recebido, recebidoMes };
+    } catch (e) {
+      console.error("[PagamentosManager] falha ao calcular resumo:", e);
+      return { aReceber: 0, recebido: 0, recebidoMes: 0 };
     }
-    return { aReceber, recebido, recebidoMes };
-  }, [orcamentos, avulsos]);
+  }, [orcamentos, avulsos, periodo]);
 
   const totalRegistros = orcamentos.length + avulsos.length;
 
@@ -352,16 +373,24 @@ export function PagamentosManager() {
             {t.subtitulo}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={carregar}
-          disabled={carregando}
-          title={dict.lista.atualizar}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${carregando ? "animate-spin" : ""}`} />
-          {dict.lista.atualizar}
-        </button>
+        <div className="flex items-center gap-2">
+          <PeriodoSelect
+            value={periodo}
+            onChange={setPeriodo}
+            label={dict.common.periodo.label}
+            opcoes={dict.common.periodo.opcoes}
+          />
+          <button
+            type="button"
+            onClick={carregar}
+            disabled={carregando}
+            title={dict.lista.atualizar}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${carregando ? "animate-spin" : ""}`} />
+            {dict.lista.atualizar}
+          </button>
+        </div>
       </div>
 
       {/* Cards de resumo */}

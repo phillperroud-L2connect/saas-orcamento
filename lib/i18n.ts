@@ -21,6 +21,15 @@ const pt = {
     cancelar: "Cancelar",
     salvando: "Salvando...",
     salvo: "Salvo",
+    periodo: {
+      label: "Período",
+      opcoes: {
+        mes: "Este mês",
+        "3meses": "Últimos 3 meses",
+        "6meses": "Últimos 6 meses",
+        ano: "Este ano",
+      },
+    },
   },
   nav: {
     orcamentos: "Orçamentos",
@@ -211,7 +220,7 @@ const pt = {
     logoFormato: "PNG ou JPG, até 2 MB.",
     logoSalvo: "Logo salvo!",
     logoAjuda:
-      "Precisa de ajuda? Envie seu logo para philip@l2connect.com.br e inserimos para você. Não tem logo? Criamos um gratuitamente.",
+      "Precisa de ajuda? Envie seu logo para atendimento@l2connect.com.br e inserimos para você. Não tem logo? Criamos um gratuitamente.",
     erroLogoImagem: "O logo precisa ser um arquivo de imagem (PNG ou JPG).",
     erroLogoTamanho: "O logo deve ter no máximo 2 MB.",
     erroLogoUpload: "Não foi possível enviar o logo. Tente novamente.",
@@ -234,12 +243,19 @@ const pt = {
     titulo: "Financeiro",
     subtitulo: "Visão geral do seu faturamento e dos últimos orçamentos.",
     faturadoMes: "Faturado no mês",
+    faturadoPeriodo: "Faturado no período",
     mesAnterior: "Mês anterior",
+    periodoAnterior: "Período anterior",
     ticketMedio: "Ticket médio",
     aprovadosVsRecusados: "Pagos vs recusados",
     semBase: "Sem base no mês anterior",
+    semBasePeriodo: "Sem base no período anterior",
     vsMesAnterior: (pct: number, sobe: boolean) =>
       `${sobe ? "▲" : "▼"} ${pct}% vs mês anterior`,
+    vsPeriodoAnterior: (pct: number, sobe: boolean) =>
+      `${sobe ? "▲" : "▼"} ${pct}% vs período anterior`,
+    faturamento: "Faturamento",
+    semFaturamentoPeriodo: "Sem faturamento pago no período.",
     faturamentoAprovado: "Faturamento pago",
     orcAprovados: (n: number) =>
       `${n} ${n === 1 ? "orçamento pago" : "orçamentos pagos"}`,
@@ -313,6 +329,15 @@ type Dict = typeof pt;
 
 const es: Dict = {
   common: {
+    periodo: {
+      label: "Período",
+      opcoes: {
+        mes: "Este mes",
+        "3meses": "Últimos 3 meses",
+        "6meses": "Últimos 6 meses",
+        ano: "Este año",
+      },
+    },
     voltar: "Volver",
     voltarPainel: "Volver al panel",
     carregando: "Cargando...",
@@ -511,7 +536,7 @@ const es: Dict = {
     logoFormato: "PNG o JPG, hasta 2 MB.",
     logoSalvo: "¡Logo guardado!",
     logoAjuda:
-      "¿Necesitas ayuda? Envía tu logo a philip@l2connect.com.br y lo insertamos por ti. ¿No tienes logo? Lo creamos gratis.",
+      "¿Necesitas ayuda? Envía tu logo a atendimento@l2connect.com.br y lo insertamos por ti. ¿No tienes logo? Lo creamos gratis.",
     erroLogoImagem: "El logo debe ser un archivo de imagen (PNG o JPG).",
     erroLogoTamanho: "El logo debe pesar como máximo 2 MB.",
     erroLogoUpload: "No se pudo subir el logo. Inténtalo de nuevo.",
@@ -534,12 +559,19 @@ const es: Dict = {
     titulo: "Finanzas",
     subtitulo: "Resumen de tu facturación y de los últimos presupuestos.",
     faturadoMes: "Facturado en el mes",
+    faturadoPeriodo: "Facturado en el período",
     mesAnterior: "Mes anterior",
+    periodoAnterior: "Período anterior",
     ticketMedio: "Ticket promedio",
     aprovadosVsRecusados: "Pagados vs rechazados",
     semBase: "Sin base del mes anterior",
+    semBasePeriodo: "Sin base del período anterior",
     vsMesAnterior: (pct: number, sobe: boolean) =>
       `${sobe ? "▲" : "▼"} ${pct}% vs mes anterior`,
+    vsPeriodoAnterior: (pct: number, sobe: boolean) =>
+      `${sobe ? "▲" : "▼"} ${pct}% vs período anterior`,
+    faturamento: "Facturación",
+    semFaturamentoPeriodo: "Sin facturación pagada en el período.",
     faturamentoAprovado: "Facturación pagada",
     orcAprovados: (n: number) =>
       `${n} ${n === 1 ? "presupuesto pagado" : "presupuestos pagados"}`,
