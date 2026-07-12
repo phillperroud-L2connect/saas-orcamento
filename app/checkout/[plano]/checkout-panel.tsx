@@ -60,7 +60,7 @@ export function CheckoutPanel({ plano, lang, pais, publicKey }: Props) {
               color: "transparent",
             }}
           >
-            {plano.nome}
+            {planoTextos.nome}
           </span>
         </h1>
 

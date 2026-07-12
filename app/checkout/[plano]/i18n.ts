@@ -167,16 +167,18 @@ export const TEXTOS: Record<Lang, Textos> = {
 };
 
 /**
- * Conteúdo dos planos por idioma (descrição e recursos). A versão PT espelha
- * planos.ts — que segue sendo a fonte da verdade de preços/ids. O nome do
- * plano ("Básico"/"Pro") é igual nos dois idiomas, então vem direto do plano.
+ * Conteúdo dos planos por idioma (nome, descrição e recursos). A versão PT
+ * espelha planos.ts — que segue sendo a fonte da verdade de preços/ids. O nome
+ * exibido é localizado: no Brasil (pt) o plano Pro é apresentado como
+ * "Completo"; na Argentina (es) segue "Pro".
  */
 const PLANO_TEXTOS: Record<
   Lang,
-  Record<PlanoId, { descricao: string; recursos: string[] }>
+  Record<PlanoId, { nome: string; descricao: string; recursos: string[] }>
 > = {
   pt: {
     basico: {
+      nome: "Básico",
       descricao:
         "Para profissionais que estão começando a organizar seus orçamentos.",
       recursos: [
@@ -187,6 +189,7 @@ const PLANO_TEXTOS: Record<
       ],
     },
     pro: {
+      nome: "Completo",
       descricao: "Para quem precisa de mais controle, marca e relatórios.",
       recursos: [
         "Tudo do plano Básico",
@@ -199,6 +202,7 @@ const PLANO_TEXTOS: Record<
   },
   es: {
     basico: {
+      nome: "Básico",
       descricao:
         "Para profesionales que están empezando a organizar sus presupuestos.",
       recursos: [
@@ -209,6 +213,7 @@ const PLANO_TEXTOS: Record<
       ],
     },
     pro: {
+      nome: "Pro",
       descricao: "Para quienes necesitan más control, marca e informes.",
       recursos: [
         "Todo lo del plan Básico",

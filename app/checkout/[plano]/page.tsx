@@ -3,7 +3,7 @@ import Script from "next/script";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { getPlano, paisDoIdioma } from "@/lib/planos";
 import { CheckoutPanel } from "./checkout-panel";
-import { TEXTOS, resolverLang } from "./i18n";
+import { TEXTOS, resolverLang, getPlanoTextos } from "./i18n";
 
 /* Tipografia do design system L2 — escopada à página de checkout.
    (O layout global usa Geist; não o alteramos para não afetar o app.) */
@@ -29,9 +29,12 @@ type Props = {
 
 export function generateMetadata({ params, searchParams }: Props) {
   const plano = getPlano(params.plano);
-  const t = TEXTOS[resolverLang(searchParams?.lang)];
+  const lang = resolverLang(searchParams?.lang);
+  const t = TEXTOS[lang];
+  // Nome localizado (pt: Pro → "Completo"); fallback para o nome do catálogo.
+  const nome = plano ? getPlanoTextos(plano.id, lang).nome : "";
   return {
-    title: plano ? t.metaTitle(plano.nome) : t.metaCheckout,
+    title: plano ? t.metaTitle(nome) : t.metaCheckout,
   };
 }
 
