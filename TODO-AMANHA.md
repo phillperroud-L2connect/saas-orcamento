@@ -4,8 +4,9 @@ Estado do código: multi-país (AR/BR) já no `main` — assinatura em BRL, OAut
 país e split. O que resta é **validação manual** (fora do código) + a tarefa nova
 de detecção de país por IP.
 
-_Última atualização (2026-07-12): migração Supabase aplicada em produção e
-credenciais de PRODUÇÃO da assinatura BR ativas no Vercel com redeploy feito._
+_Última atualização (2026-07-12): migração Supabase aplicada em produção,
+credenciais de PRODUÇÃO da assinatura BR ativas no Vercel com redeploy feito, e
+detecção automática de país por IP implementada no middleware._
 
 ---
 
@@ -28,6 +29,17 @@ credenciais de PRODUÇÃO da assinatura BR ativas no Vercel com redeploy feito._
   `onboarding_tokens.pais` (default `'AR'`, check `AR|BR`) existe no banco. Com
   isso o webhook de assinatura BR grava o país no token de onboarding e provisiona
   a conta ponta a ponta. Era o único bloqueador do fluxo — **destravado**.
+- **Detecção automática de país por IP (middleware).** No checkout público de
+  plano, o `middleware.ts` lê o header `x-vercel-ip-country` (grátis na Vercel) e
+  define o idioma de PARTIDA: BR → pt/BRL/credenciais MP Brasil; qualquer outro
+  país → es/ARS (fluxo padrão AR). **Sem trava:** a precedência é `?lang=`
+  explícito › cookie de preferência (`pref_idioma`, lembra a última escolha) ›
+  país do IP. O `?lang=` (link do site institucional ou troca manual) sempre
+  vence e é memorizado no cookie — nenhuma alteração no site institucional
+  (WordPress/Elementor) é necessária. A lógica reaproveita a fonte única
+  `lib/mp-paises.js` (nova função pura `idiomaPorPaisIp`, coberta por 3 testes) e
+  é fail-open (qualquer erro/ambiente sem o header segue sem redirecionar). Vale
+  tanto para quem chega direto no domínio quanto via botão "Assinar".
 
 ---
 
@@ -64,26 +76,20 @@ fluxo real de venda:
 
 ---
 
-## 🆕 Tarefa nova (ainda não iniciada) — Detecção de país por IP
+## ✅ Detecção de país por IP — CONCLUÍDA (ver detalhes em "Concluído" acima)
 
-Implementar detecção automática de país por IP, **mantendo a liberdade** do
-visitante de escolher idioma/país manualmente.
+Implementada no `middleware.ts` (`tratarIdiomaCheckout`) + `lib/mp-paises.js`
+(`idiomaPorPaisIp`, pura e testada). Resumo dos requisitos atendidos:
 
-Requisitos e restrições:
+- ✅ Middleware Vercel lendo `x-vercel-ip-country` (sem custo/config externa).
+- ✅ BR → pt/BRL/credenciais MP Brasil; outro país → es/ARS (fluxo padrão AR).
+- ✅ Sem trava: `?lang=` explícito › cookie `pref_idioma` › IP. Troca manual
+  sempre vence e é lembrada no cookie (1 ano).
+- ✅ Vale para acesso direto ao domínio e via botão "Assinar" do site
+  institucional, sem editar o WordPress/Elementor.
+- ✅ Fail-open com try/catch + logging; sem loop de redirect (após anexar o
+  `?lang=` o pedido vira explícito); `/checkout/sucesso` fica de fora.
 
-- Rodar como **middleware na Vercel** (`middleware.ts`), sem exigir edição do
-  HTML do site institucional.
-- Usar a geolocalização de borda da Vercel (`request.geo.country` /
-  `x-vercel-ip-country`) para inferir AR vs BR.
-- **Não travar** a escolha: a detecção define só o *default*; o visitante pode
-  trocar idioma/país manualmente (persistir a preferência em cookie e priorizá-la
-  sobre o IP).
-- Direcionar o botão **"Assinar"** para o checkout do país correto — montar o
-  link com o `?lang=` certo (pt→BR / es→AR), que o sistema já usa para escolher
-  gaveta de credenciais e moeda.
-- Cuidados: fallback seguro quando o país do IP for desconhecido/indisponível;
-  não quebrar o SEO/SSR; evitar loop de redirecionamento no middleware.
-
-> Contexto: o mapeamento idioma↔país já existe em `lib/mp-paises.js`
-> (`paisDoIdioma`); o checkout já lê `?lang=` para decidir AR/BR. A tarefa é só a
-> camada de **detecção + roteamento** por cima disso.
+Validação manual sugerida (opcional): abrir o checkout a partir de um IP BR e de
+um IP não-BR (VPN) e confirmar o idioma/moeda de partida, depois trocar o
+`?lang=` na mão e confirmar que a escolha persiste.

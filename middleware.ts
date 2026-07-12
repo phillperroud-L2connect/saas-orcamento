@@ -1,6 +1,70 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isAdminUser } from "@/lib/admin";
+import { idiomaPorPaisIp } from "@/lib/mp-paises";
+
+// Cookie que lembra a última escolha de idioma do checkout (manual via ?lang=
+// ou inferida pelo IP), para que navegações sem ?lang= a respeitem. 1 ano.
+const COOKIE_IDIOMA = "pref_idioma";
+const COOKIE_IDIOMA_MAX_AGE = 60 * 60 * 24 * 365;
+
+/** "pt"/"es" se o valor for um idioma suportado explícito; senão null. */
+function normalizarLangParam(
+  valor: string | null | undefined,
+): "pt" | "es" | null {
+  const v = String(valor ?? "").trim().toLowerCase();
+  return v === "pt" || v === "es" ? v : null;
+}
+
+/** Grava a preferência de idioma na resposta (cookie lax, 1 ano). */
+function persistirIdioma(resp: NextResponse, lang: "pt" | "es") {
+  resp.cookies.set(COOKIE_IDIOMA, lang, {
+    path: "/",
+    maxAge: COOKIE_IDIOMA_MAX_AGE,
+    sameSite: "lax",
+  });
+}
+
+/**
+ * Checkout público de plano: define o idioma de PARTIDA (pt/BR ou es/AR) sem
+ * NUNCA travar a escolha do visitante. Precedência:
+ *   1. ?lang= explícito (link do site institucional OU troca manual) — vence
+ *      sempre; apenas renderiza e memoriza a escolha no cookie.
+ *   2. cookie de preferência (última escolha explícita anterior).
+ *   3. país do IP via header `x-vercel-ip-country` (BR → pt; resto → es).
+ * Nos casos 2 e 3 redireciona anexando o ?lang= para que o resto do sistema
+ * (page/checkout, credenciais MP, moeda, textos) enxergue o idioma. Depois do
+ * redirect o ?lang= vira explícito → cai no caso 1 → sem loop.
+ *
+ * À prova de falha: qualquer erro (ou ambiente sem o header, como local) segue
+ * sem redirecionar (fail-open) — a venda nunca pode quebrar por causa disto.
+ */
+function tratarIdiomaCheckout(request: NextRequest): NextResponse {
+  try {
+    const url = request.nextUrl.clone();
+
+    const explicito = normalizarLangParam(url.searchParams.get("lang"));
+    if (explicito) {
+      const resp = NextResponse.next({ request });
+      persistirIdioma(resp, explicito);
+      return resp;
+    }
+
+    const preferido = normalizarLangParam(
+      request.cookies.get(COOKIE_IDIOMA)?.value,
+    );
+    const lang =
+      preferido ?? idiomaPorPaisIp(request.headers.get("x-vercel-ip-country"));
+
+    url.searchParams.set("lang", lang);
+    const resp = NextResponse.redirect(url);
+    persistirIdioma(resp, lang);
+    return resp;
+  } catch (err) {
+    console.error("[middleware] idioma do checkout — fail-open:", err);
+    return NextResponse.next({ request });
+  }
+}
 
 // Rotas públicas — acessíveis sem autenticação.
 // /checkout e /api/mp são públicas: a venda acontece antes de existir conta,
@@ -29,6 +93,17 @@ const ROTAS_PUBLICAS = [
 ];
 
 export async function middleware(request: NextRequest) {
+  // Checkout público de plano: idioma de partida por IP (sem travar a escolha).
+  // Tratado antes da revalidação de sessão (rota pública, sem login). Exclui
+  // /checkout/sucesso — o pós-pagamento não usa ?lang= e não deve redirecionar.
+  const { pathname: caminho } = request.nextUrl;
+  if (
+    caminho.startsWith("/checkout/") &&
+    !caminho.startsWith("/checkout/sucesso")
+  ) {
+    return tratarIdiomaCheckout(request);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

@@ -25,6 +25,7 @@ import {
   moedaAssinatura,
   idiomaDoPais,
   paisDoIdioma,
+  idiomaPorPaisIp,
   authDomainMp,
   precoAssinatura,
   PRECOS_ASSINATURA,
@@ -212,6 +213,25 @@ test("paisDoIdioma: pt → BR, es → AR, desconhecido → AR", () => {
   assert.equal(paisDoIdioma("pt"), "BR");
   assert.equal(paisDoIdioma("es"), "AR");
   assert.equal(paisDoIdioma("en"), "AR");
+});
+
+test("idiomaPorPaisIp: BR (x-vercel-ip-country) → pt, tolerando caixa/espaços", () => {
+  assert.equal(idiomaPorPaisIp("BR"), "pt");
+  assert.equal(idiomaPorPaisIp("br"), "pt");
+  assert.equal(idiomaPorPaisIp("  BR  "), "pt");
+});
+
+test("idiomaPorPaisIp: qualquer outro país → es (fluxo padrão AR)", () => {
+  assert.equal(idiomaPorPaisIp("AR"), "es");
+  assert.equal(idiomaPorPaisIp("US"), "es");
+  // Portugal fala português mas NÃO é o mercado BR (moeda/credenciais MP Brasil).
+  assert.equal(idiomaPorPaisIp("PT"), "es");
+});
+
+test("idiomaPorPaisIp: header ausente/nulo → es (fail-safe, ex.: ambiente local)", () => {
+  assert.equal(idiomaPorPaisIp(""), "es");
+  assert.equal(idiomaPorPaisIp(null), "es");
+  assert.equal(idiomaPorPaisIp(undefined), "es");
 });
 
 test("authDomainMp: domínio de autorização correto por país", () => {

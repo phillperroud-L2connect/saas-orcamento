@@ -18,6 +18,7 @@ export function normalizarPais(valor: unknown, padrao?: Pais): Pais;
 export function moedaAssinatura(pais: unknown): MoedaAssinatura;
 export function idiomaDoPais(pais: unknown): Idioma;
 export function paisDoIdioma(idioma: unknown): Pais;
+export function idiomaPorPaisIp(countryCode: unknown): Idioma;
 export function authDomainMp(pais: unknown): string;
 export function localeAssinatura(pais: unknown): string;
 
