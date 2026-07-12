@@ -21,6 +21,11 @@ export function paisDoIdioma(idioma: unknown): Pais;
 export function idiomaPorPaisIp(countryCode: unknown): Idioma;
 export function authDomainMp(pais: unknown): string;
 export function localeAssinatura(pais: unknown): string;
+export function configFormatoMoeda(moeda: unknown): {
+  locale: string;
+  currency: MoedaAssinatura;
+  maximumFractionDigits: number;
+};
 
 export const PRECOS_ASSINATURA: Record<
   PlanoId,

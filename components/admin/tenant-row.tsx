@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { moedaAssinatura } from "@/lib/mp-paises";
 import type {
   Tenant,
   PlanoContratado,
@@ -164,6 +165,7 @@ export function TenantRow({ tenant, pagamentos }: Props) {
       nome: tenant.nome_profissional ?? tenant.nome_empresa,
       email: tenant.email,
       valor: null,
+      moeda: moedaAssinatura(tenant.pais),
       status: "approved",
       forma_pagamento: formaManual,
       tenant_id: tenant.id,

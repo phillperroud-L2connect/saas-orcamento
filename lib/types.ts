@@ -62,6 +62,8 @@ export type Assinatura = {
   email: string;
   whatsapp: string | null;
   valor: number | null;
+  /** Moeda do pagamento (ver supabase-assinatura-moeda.sql). Default 'ARS'. */
+  moeda: "ARS" | "BRL";
   status: string;
   forma_pagamento: FormaPagamento | string;
   tenant_id: string | null;

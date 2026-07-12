@@ -5,8 +5,9 @@ país e split. O que resta é **validação manual** (fora do código) + a taref
 de detecção de país por IP.
 
 _Última atualização (2026-07-12): migração Supabase aplicada em produção,
-credenciais de PRODUÇÃO da assinatura BR ativas no Vercel com redeploy feito, e
-detecção automática de país por IP implementada no middleware._
+credenciais de PRODUÇÃO da assinatura BR ativas no Vercel com redeploy feito,
+detecção automática de país por IP implementada no middleware, e **correção da
+formatação de moeda no painel admin** (assinaturas BR não aparecem mais como ARS)._
 
 ---
 
@@ -40,10 +41,32 @@ detecção automática de país por IP implementada no middleware._
   `lib/mp-paises.js` (nova função pura `idiomaPorPaisIp`, coberta por 3 testes) e
   é fail-open (qualquer erro/ambiente sem o header segue sem redirecionar). Vale
   tanto para quem chega direto no domínio quanto via botão "Assinar".
+- **Correção da formatação de moeda no painel admin (BRL × ARS).** O admin
+  formatava todo valor do histórico como ARS (hardcoded `es-AR`/`ARS` em
+  `tenants/[id]/page.tsx`), então assinaturas BR em BRL apareciam como pesos
+  argentinos. Corrigido na causa raiz:
+  - Nova coluna `assinaturas.moeda` (`supabase-assinatura-moeda.sql`, default
+    `'ARS'`) — **ainda falta aplicar em produção** (ver item 0 acima).
+  - Webhook (`app/api/mp/webhook/route.ts`) grava a moeda derivada do país
+    (`moedaAssinatura(pais)`, BR → BRL) em try/catch com logging (fail-safe ARS).
+  - Lançamento manual "Marcar como pago" (`components/admin/tenant-row.tsx`)
+    grava `moeda` a partir de `tenant.pais`.
+  - `formatarValor` passou a usar a moeda do registro via nova função pura
+    `configFormatoMoeda` (`lib/mp-paises.js`): BRL em pt-BR com centavos, ARS em
+    es-AR sem centavos. Coberta por 2 testes novos (38 testes passando).
 
 ---
 
 ## ⏳ Falta fazer
+
+### 0. Aplicar a migração `supabase-assinatura-moeda.sql` em produção
+
+A correção de moeda do admin (abaixo) adiciona a coluna `assinaturas.moeda`
+(`text`, default `'ARS'`, check `ARS|BRL`). **Rodar `supabase-assinatura-moeda.sql`
+no SQL Editor do Supabase** (idempotente). Enquanto não aplicada, os inserts do
+webhook/lançamento manual que mandam o campo `moeda` vão falhar — aplicar antes
+do próximo pagamento BR. Registros antigos ficam como `'ARS'` pelo default (todos
+eram Argentina), sem migração retroativa.
 
 ### 1. Validar manualmente OAuth + split com usuários de teste MP
 
@@ -73,6 +96,22 @@ fluxo real de venda:
    tokenizado (`/cadastro?token=...`) chega via Resend.
 4. Completar o cadastro (definir senha) e confirmar que o tenant é provisionado
    com pais/idioma/moeda BR (pt/BRL).
+
+### 3. Melhorias de país no painel admin (diagnóstico — baixa/média prioridade)
+
+Itens levantados no diagnóstico do admin (ver `Área de Trabalho/Diagnostico-Admin-BR.md`).
+Não são bugs (o painel não quebra); são ausências de visibilidade. A correção de
+moeda — o único que exibia informação errada — já foi feita. Pendentes:
+
+- **(Média) País na tela de detalhe do tenant.** `/admin/tenants/[id]` mostra só
+  o `nome_empresa`; não indica AR/BR. Adicionar bandeira/rótulo no cabeçalho.
+- **(Média) Filtro / visão separada por país na lista.** Hoje AR e BR aparecem
+  misturados na mesma tabela (`/admin`), sem filtro nem aba. Único indicador é a
+  bandeirinha na linha. Avaliar um filtro por país (`?pais=BR`).
+- **(Baixa) País nas linhas de "vendas pendentes".** As vendas pagas aguardando
+  cadastro (`page.tsx`) não mostram país — a query nem seleciona, e a fonte
+  (`assinaturas`) não tinha país. Agora que `assinaturas.moeda` existe, dá para
+  inferir o país pela moeda (BRL → BR) ou incluir na query.
 
 ---
 

@@ -7,7 +7,7 @@ import {
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { getPlano, getPrecoPorPeriodo, isPeriodo } from "@/lib/planos";
-import { normalizarPais } from "@/lib/mp-paises";
+import { normalizarPais, moedaAssinatura } from "@/lib/mp-paises";
 import { enviarLinkCadastro, notificarAdminNovaVenda } from "@/lib/email";
 import {
   aplicarRateLimit,
@@ -165,6 +165,19 @@ export async function POST(req: Request) {
       "buscar tenant por e-mail",
     );
 
+    // Moeda do pagamento derivada do país da conta (BR → BRL, senão ARS).
+    // Isolado em try/catch para nunca derrubar o webhook: na falha improvável,
+    // cai no default 'ARS' (idêntico ao default da coluna) e loga para auditoria.
+    let moeda: "ARS" | "BRL" = "ARS";
+    try {
+      moeda = moedaAssinatura(pais);
+    } catch (moedaErr) {
+      console.error(
+        "[mp/webhook] falha ao determinar moeda, usando ARS:",
+        moedaErr,
+      );
+    }
+
     // --- 2. Idempotência: registra a venda. ---------------------------------
     // mp_payment_id é UNIQUE; se já existir, foi processada — encerra aqui.
     // Numa renovação já vinculamos a venda ao tenant existente.
@@ -177,6 +190,7 @@ export async function POST(req: Request) {
         email,
         whatsapp,
         valor: payment.transaction_amount ?? getPrecoPorPeriodo(plano, periodo, pais),
+        moeda,
         status: payment.status,
         forma_pagamento: "mercado_pago",
         tenant_id: tenantExistente?.id ?? null,

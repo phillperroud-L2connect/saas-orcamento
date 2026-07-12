@@ -27,6 +27,7 @@ import {
   paisDoIdioma,
   idiomaPorPaisIp,
   authDomainMp,
+  configFormatoMoeda,
   precoAssinatura,
   PRECOS_ASSINATURA,
 } from "./lib/mp-paises.js";
@@ -202,6 +203,29 @@ test("moedaAssinatura: BR → BRL, AR → ARS, desconhecido → ARS", () => {
   assert.equal(moedaAssinatura("BR"), "BRL");
   assert.equal(moedaAssinatura("AR"), "ARS");
   assert.equal(moedaAssinatura("zz"), "ARS");
+});
+
+test("configFormatoMoeda: BRL → pt-BR/BRL com centavos", () => {
+  assert.deepEqual(configFormatoMoeda("BRL"), {
+    locale: "pt-BR",
+    currency: "BRL",
+    maximumFractionDigits: 2,
+  });
+  // Tolera caixa e espaços da coluna.
+  assert.deepEqual(configFormatoMoeda("  brl "), {
+    locale: "pt-BR",
+    currency: "BRL",
+    maximumFractionDigits: 2,
+  });
+});
+
+test("configFormatoMoeda: ARS/desconhecido/nulo → es-AR/ARS sem centavos (legado)", () => {
+  const esperado = { locale: "es-AR", currency: "ARS", maximumFractionDigits: 0 };
+  assert.deepEqual(configFormatoMoeda("ARS"), esperado);
+  assert.deepEqual(configFormatoMoeda("zz"), esperado);
+  assert.deepEqual(configFormatoMoeda(""), esperado);
+  assert.deepEqual(configFormatoMoeda(null), esperado);
+  assert.deepEqual(configFormatoMoeda(undefined), esperado);
 });
 
 test("idiomaDoPais: BR → pt, AR → es", () => {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { configFormatoMoeda } from "@/lib/mp-paises";
 import { TenantForm } from "@/components/tenant-form";
 import type { Tenant, Assinatura } from "@/lib/types";
 
@@ -23,12 +24,17 @@ function formatarDataHora(iso: string): string {
   return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleString("pt-BR");
 }
 
-function formatarValor(valor: number | null): string {
+/**
+ * Formata o valor na moeda do próprio registro (assinaturas.moeda), não mais
+ * hardcoded em ARS: BRL sai em pt-BR com centavos; ARS em es-AR sem centavos.
+ */
+function formatarValor(valor: number | null, moeda: string | null): string {
   if (valor == null) return "—";
-  return new Intl.NumberFormat("es-AR", {
+  const { locale, currency, maximumFractionDigits } = configFormatoMoeda(moeda);
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "ARS",
-    maximumFractionDigits: 0,
+    currency,
+    maximumFractionDigits,
   }).format(valor);
 }
 
@@ -105,7 +111,7 @@ export default async function EditarTenantPage({
                       {PLANO_LABEL[p.plano] ?? p.plano}
                     </td>
                     <td className="px-5 py-3 text-gray-700">
-                      {formatarValor(p.valor)}
+                      {formatarValor(p.valor, p.moeda)}
                     </td>
                     <td className="px-5 py-3 text-gray-600">
                       {FORMA_LABEL[p.forma_pagamento] ?? p.forma_pagamento}
