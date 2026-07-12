@@ -1,9 +1,11 @@
 # TODO — Fechar a integração Mercado Pago Brasil
 
 Estado do código: multi-país (AR/BR) já no `main` — assinatura em BRL, OAuth por
-país e split. O que resta é **configuração/validação** (fora do código).
+país e split. O que resta é **validação manual** (fora do código) + a tarefa nova
+de detecção de país por IP.
 
-_Última atualização: credenciais e webhook BR configurados._
+_Última atualização (2026-07-12): migração Supabase aplicada em produção e
+credenciais de PRODUÇÃO da assinatura BR ativas no Vercel com redeploy feito._
 
 ---
 
@@ -14,28 +16,24 @@ _Última atualização: credenciais e webhook BR configurados._
   `NEXT_PUBLIC_MP_PUBLIC_KEY_BR`, `MP_ACCESS_TOKEN_BR`) estão gravadas localmente
   e no Vercel (Production), com **redeploy já feito** — no ar.
   - OAuth (`CLIENT_ID`/`CLIENT_SECRET`): **credenciais de produção**.
-  - Assinatura (`ACCESS_TOKEN`/`PUBLIC_KEY`): ainda **teste/sandbox** (por opção).
+  - Assinatura (`ACCESS_TOKEN`/`PUBLIC_KEY`): **credenciais de produção** —
+    atualizadas em 2026-07-12 (eram de um usuário de teste). Redeploy feito, então
+    a `NEXT_PUBLIC_MP_PUBLIC_KEY_BR` (embutida no build) já está valendo. A
+    cobrança da assinatura BR agora **movimenta dinheiro real**.
 - **Webhook cadastrado no painel da app MP Brasil** apontando para
   `https://orcamento-saas-phillbrar.vercel.app/api/mp/webhook`, com a
-  "Assinatura secreta" gerada e configurada em `MP_WEBHOOK_SECRET_BR`.
+  "Assinatura secreta" (modo produção) gerada e configurada em
+  `MP_WEBHOOK_SECRET_BR`. Confirmado válido — não precisa regenerar.
+- **Migração `supabase-tokens-onboarding.sql` aplicada em produção.** A coluna
+  `onboarding_tokens.pais` (default `'AR'`, check `AR|BR`) existe no banco. Com
+  isso o webhook de assinatura BR grava o país no token de onboarding e provisiona
+  a conta ponta a ponta. Era o único bloqueador do fluxo — **destravado**.
 
 ---
 
-## ⏳ Falta fazer (na ordem)
+## ⏳ Falta fazer
 
-### 1. Rodar a migração no Supabase (produção) — BLOQUEADOR
-
-Aplicar `supabase-tokens-onboarding.sql` no banco de produção.
-
-- Adiciona a coluna `onboarding_tokens.pais` (default `'AR'`, check `AR|BR`).
-- Migração **idempotente** (`add column if not exists`) — segura, não altera
-  dados existentes.
-- **Por que é bloqueador:** sem essa coluna, quando uma assinatura BR é aprovada
-  o webhook falha ao gravar o país no token de onboarding → a conta **não é
-  provisionada** (cliente paga e não recebe acesso). É o único item que ainda
-  trava o fluxo de **assinatura** BR ponta a ponta.
-
-### 2. Validar manualmente OAuth + split com usuários de teste MP
+### 1. Validar manualmente OAuth + split com usuários de teste MP
 
 Exige clique real no navegador (login do vendedor de teste na tela do MP) — não
 dá para automatizar headless. Como o OAuth já usa credenciais de **produção**, a
@@ -51,17 +49,18 @@ autorização conecta contas MP reais; para testar sem mexer em conta real, use
    - o orçamento vira `aprovado` e o pagamento entra em `public.pagamentos`;
    - o dinheiro cai na conta do **vendedor de teste** (split).
 
-### 3. Trocar assinatura para credenciais de PRODUÇÃO (antes de cobrar de verdade)
+### 2. Teste manual do fluxo de assinatura BR ponta a ponta
 
-Enquanto `MP_ACCESS_TOKEN_BR` e `NEXT_PUBLIC_MP_PUBLIC_KEY_BR` forem de
-teste/sandbox, a cobrança da assinatura BR **não movimenta dinheiro real**.
+Agora que a assinatura está em produção e a migração foi aplicada, validar o
+fluxo real de venda:
 
-- Você já tem o Access Token e a Public Key de **produção** da app BR em mãos
-  (por opção, mantendo sandbox por enquanto).
-- Quando for cobrar de verdade: substituir as duas **no `.env.local` e no Vercel
-  (Production)** e **redeployar** (lembrar: `NEXT_PUBLIC_MP_PUBLIC_KEY_BR` é
-  embutida no build). As credenciais OAuth (item concluído) já são as definitivas
-  e **não** mudam.
+1. Assinar um plano com `pais=BR` (checkout em BRL).
+2. Confirmar que o `/api/mp/webhook?pais=BR` recebe a notificação, valida a
+   assinatura e retorna 200.
+3. Confirmar que o token de onboarding é gravado com `pais='BR'` e o e-mail
+   tokenizado (`/cadastro?token=...`) chega via Resend.
+4. Completar o cadastro (definir senha) e confirmar que o tenant é provisionado
+   com pais/idioma/moeda BR (pt/BRL).
 
 ---
 
