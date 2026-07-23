@@ -7,7 +7,7 @@ name: Supabase Keep-Alive Ping
 on:
   schedule:
     # A cada 3 dias, às 06:00 UTC
-    - cron: '0 6 */3 * *'
+    - cron: '0 10 * * *'
   # Permite disparo manual pela aba Actions
   workflow_dispatch:
 
