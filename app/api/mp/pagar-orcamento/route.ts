@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { Preference } from "mercadopago";
-import { getMercadoPagoClientFor, getSiteUrl } from "@/lib/mercadopago";
+import {
+  getMercadoPagoClientFor,
+  getSiteUrl,
+  executarComRenovacaoMp,
+} from "@/lib/mercadopago";
 import { normalizarPais } from "@/lib/mp-paises";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import {
@@ -55,7 +59,7 @@ export async function POST(req: Request) {
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("mp_access_token, nome_empresa, pais")
+    .select("mp_access_token, mp_refresh_token, nome_empresa, pais")
     .eq("id", orc.tenant_id)
     .maybeSingle();
 
@@ -72,33 +76,49 @@ export async function POST(req: Request) {
     orc.titulo || `Orçamento ${orc.numero ?? ""}`.trim() || "Pagamento";
 
   try {
-    const preference = new Preference(getMercadoPagoClientFor(tenant.mp_access_token));
-
-    const result = await preference.create({
-      body: {
-        items: [
-          {
-            id: orc.id,
-            title: titulo,
-            quantity: 1,
-            unit_price: Number(orc.total),
-            currency_id: orc.moeda,
-          },
-        ],
-        metadata: { orcamento_id: orc.id, tenant_id: orc.tenant_id },
-        external_reference: orc.id,
-        statement_descriptor: (tenant.nome_empresa || "ORCAMENTO").slice(0, 22),
-        back_urls: {
-          success: `${siteUrl}/pagar/${orc.id}?status=success`,
-          pending: `${siteUrl}/pagar/${orc.id}?status=pending`,
-          failure: `${siteUrl}/pagar/${orc.id}?status=failure`,
+    const preferenceBody = {
+      items: [
+        {
+          id: orc.id,
+          title: titulo,
+          quantity: 1,
+          unit_price: Number(orc.total),
+          currency_id: orc.moeda,
         },
-        ...(ehLocalhost ? {} : { auto_return: "approved" as const }),
-        // tenant/orcamento na URL: o webhook precisa do token do prestador
-        // (que criou o pagamento) para consultá-lo na API do Mercado Pago.
-        // `pais` seleciona a gaveta do secret que valida a assinatura do webhook
-        // (a app AR ou BR que intermediou a conexão OAuth do prestador).
-        notification_url: `${siteUrl}/api/mp/webhook-orcamento?tenant=${orc.tenant_id}&orcamento=${orc.id}&pais=${normalizarPais(tenant.pais)}`,
+      ],
+      metadata: { orcamento_id: orc.id, tenant_id: orc.tenant_id },
+      external_reference: orc.id,
+      statement_descriptor: (tenant.nome_empresa || "ORCAMENTO").slice(0, 22),
+      back_urls: {
+        success: `${siteUrl}/pagar/${orc.id}?status=success`,
+        pending: `${siteUrl}/pagar/${orc.id}?status=pending`,
+        failure: `${siteUrl}/pagar/${orc.id}?status=failure`,
+      },
+      ...(ehLocalhost ? {} : { auto_return: "approved" as const }),
+      // tenant/orcamento na URL: o webhook precisa do token do prestador
+      // (que criou o pagamento) para consultá-lo na API do Mercado Pago.
+      // `pais` seleciona a gaveta do secret que valida a assinatura do webhook
+      // (a app AR ou BR que intermediou a conexão OAuth do prestador).
+      notification_url: `${siteUrl}/api/mp/webhook-orcamento?tenant=${orc.tenant_id}&orcamento=${orc.id}&pais=${normalizarPais(tenant.pais)}`,
+    };
+
+    // Cria a preferência com o token do prestador; se ele tiver expirado (401),
+    // renova automaticamente via refresh_token, persiste os novos tokens e repete.
+    const result = await executarComRenovacaoMp({
+      accessToken: tenant.mp_access_token,
+      refreshToken: tenant.mp_refresh_token,
+      pais: normalizarPais(tenant.pais),
+      run: (token) =>
+        new Preference(getMercadoPagoClientFor(token)).create({ body: preferenceBody }),
+      onRenovado: async (novo) => {
+        await supabase
+          .from("tenants")
+          .update({
+            mp_access_token: novo.access_token,
+            mp_refresh_token: novo.refresh_token ?? tenant.mp_refresh_token,
+            ...(novo.user_id != null ? { mp_user_id: String(novo.user_id) } : {}),
+          })
+          .eq("id", orc.tenant_id);
       },
     });
 

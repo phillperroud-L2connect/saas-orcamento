@@ -218,6 +218,93 @@ export async function trocarCodigoMpPorToken(
   return (await res.json()) as MpOAuthToken;
 }
 
+/**
+ * Renova o access_token do prestador a partir do refresh_token
+ * (`grant_type=refresh_token`). O Mercado Pago ROTACIONA os tokens: além de um
+ * novo access_token, devolve um novo refresh_token que substitui o anterior — o
+ * chamador precisa persistir AMBOS. Usa a gaveta de credenciais do país (a mesma
+ * aplicação AR/BR que emitiu o token original). Roda só no servidor (client_secret).
+ */
+export async function renovarTokenMp(
+  refreshToken: string,
+  pais: Pais = "AR",
+): Promise<MpOAuthToken> {
+  const { clientId, clientSecret } = getMpOAuthCredentials(pais);
+
+  const res = await fetch("https://api.mercadopago.com/oauth/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!res.ok) {
+    // Não incluímos o corpo da resposta na mensagem para não arriscar registrar
+    // credenciais/token em log; o `status` é suficiente para diagnosticar.
+    throw new Error(`Falha ao renovar token OAuth do Mercado Pago (${res.status}).`);
+  }
+  return (await res.json()) as MpOAuthToken;
+}
+
+/**
+ * true quando o erro lançado pelo SDK do Mercado Pago indica token
+ * expirado/revogado (HTTP 401/403). O SDK lança o corpo de erro da API, que
+ * carrega um `status` numérico (ver node_modules/mercadopago/dist/utils/restClient).
+ * É o gatilho da renovação automática de token.
+ */
+export function ehErro401Mp(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const status = (err as { status?: unknown }).status;
+  return status === 401 || status === 403;
+}
+
+/**
+ * Executa uma operação na API do Mercado Pago com o access_token do prestador e,
+ * se ela falhar por token expirado/revogado (401/403), renova o token via
+ * refresh_token (o MP rotaciona: novo access + novo refresh), persiste os novos
+ * tokens pelo callback `onRenovado` e REPETE a operação uma única vez. Assim uma
+ * conexão só "expira de vez" se o próprio refresh também falhar.
+ *
+ * Genérico e sem acoplamento a banco: quem chama decide como persistir. Sem
+ * refresh_token, ou se a renovação falhar, o erro ORIGINAL (401) é propagado —
+ * o comportamento atual de erro é preservado quando não há como renovar.
+ */
+export async function executarComRenovacaoMp<T>(params: {
+  accessToken: string;
+  refreshToken?: string | null;
+  pais?: Pais;
+  run: (accessToken: string) => Promise<T>;
+  onRenovado: (token: MpOAuthToken) => Promise<void> | void;
+}): Promise<T> {
+  const { accessToken, refreshToken, pais = "AR", run, onRenovado } = params;
+  try {
+    return await run(accessToken);
+  } catch (err) {
+    if (!ehErro401Mp(err) || !refreshToken) throw err;
+
+    let novo: MpOAuthToken;
+    try {
+      novo = await renovarTokenMp(refreshToken, pais);
+    } catch (renewErr) {
+      console.error(
+        "[mp] renovação automática de token falhou:",
+        renewErr instanceof Error ? renewErr.message : String(renewErr),
+      );
+      throw err; // mantém o 401 original como erro definitivo
+    }
+
+    await onRenovado(novo);
+    return await run(novo.access_token);
+  }
+}
+
 /** Busca o e-mail da conta MP conectada (best-effort — null se indisponível). */
 export async function buscarEmailContaMp(accessToken: string): Promise<string | null> {
   try {

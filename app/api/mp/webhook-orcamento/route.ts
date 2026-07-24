@@ -3,6 +3,7 @@ import { Payment } from "mercadopago";
 import {
   getMercadoPagoClientFor,
   verificarAssinaturaMpWebhook,
+  executarComRenovacaoMp,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { normalizarPais } from "@/lib/mp-paises";
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
     // Token do prestador — necessário para consultar o pagamento na API do MP.
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("id, email, mp_access_token")
+      .select("id, email, mp_access_token, mp_refresh_token")
       .eq("id", tenantId)
       .maybeSingle();
 
@@ -82,9 +83,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ ignorado: true }, { status: 200 });
     }
 
-    const payment = await new Payment(
-      getMercadoPagoClientFor(tenant.mp_access_token),
-    ).get({ id: paymentId });
+    // Consulta o pagamento com o token do prestador; se ele tiver expirado (401),
+    // renova automaticamente via refresh_token, persiste os novos e repete.
+    // `pais` (da query) = gaveta OAuth AR/BR usada na conexão deste prestador.
+    const payment = await executarComRenovacaoMp({
+      accessToken: tenant.mp_access_token,
+      refreshToken: tenant.mp_refresh_token,
+      pais,
+      run: (token) =>
+        new Payment(getMercadoPagoClientFor(token)).get({ id: paymentId }),
+      onRenovado: async (novo) => {
+        await supabase
+          .from("tenants")
+          .update({
+            mp_access_token: novo.access_token,
+            mp_refresh_token: novo.refresh_token ?? tenant.mp_refresh_token,
+            ...(novo.user_id != null ? { mp_user_id: String(novo.user_id) } : {}),
+          })
+          .eq("id", tenantId);
+      },
+    });
 
     // Trilha de auditoria (best-effort): evento recebido com o tenant do
     // prestador e o orçamento referenciado. Não bloqueia o webhook.
