@@ -18,8 +18,15 @@ export type Pais = "BR" | "AR";
 export type Idioma = "pt" | "es";
 export type MoedaPreferida = "BRL" | "ARS" | "USD";
 
-/** Plano contratado pelo tenant ("manual" = pagamento fora do Mercado Pago). */
-export type PlanoContratado = "basico" | "pro" | "manual";
+/**
+ * Plano contratado pelo tenant ("manual" = pagamento fora do Mercado Pago).
+ *
+ * "max" é o plano superior do segmento web designer — libera os três templates
+ * premium (ver lib/templates-core.js). É atribuído pelo admin; ainda NÃO tem
+ * preço nem entrada no catálogo de checkout (lib/planos.ts) — a precificação e
+ * a página de vendas são um passo posterior.
+ */
+export type PlanoContratado = "basico" | "pro" | "max" | "manual";
 /** Status de pagamento da assinatura (badge colorido no admin). */
 export type StatusAssinatura = "pago" | "pendente" | "inadimplente";
 /** Como o cliente paga a assinatura. */
@@ -33,6 +40,12 @@ export type Tenant = {
   telefone: string | null;
   logo_url: string | null;
   cor_primaria: string | null;
+  /**
+   * Overrides de cor dos templates premium (Plano Max), por template e token —
+   * ver supabase-templates-premium.sql e lib/templates-core.js. `null`/ausente
+   * = usa as paletas padrão. Estruturado como { [templateId]: { token: hex } }.
+   */
+  paleta_templates: import("./templates-core").PaletaOverrides | null;
   pais: Pais;
   idioma: Idioma;
   moeda_preferida: MoedaPreferida | null;

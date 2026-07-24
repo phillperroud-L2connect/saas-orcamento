@@ -304,3 +304,217 @@ test("PRECOS_ASSINATURA: cobre os dois planos nos dois países", () => {
     assert.ok(PRECOS_ASSINATURA[plano].BR, `${plano} precisa de preço BR`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Templates premium — matemática de cor, gating por plano e paletas
+// (lib/templates-core.js)
+// ---------------------------------------------------------------------------
+import {
+  normalizarHex,
+  misturar,
+  elevar,
+  contraste,
+  luminancia,
+  ehEscuro,
+  melhorContraste,
+  garantirContraste,
+  isTemplateId,
+  planoDoTemplate,
+  podeUsarTemplate,
+  templatesDisponiveis,
+  resolverTemplate,
+  paletaEfetiva,
+  derivarTema,
+  TEMPLATES_MAX,
+  TEMPLATE_PADRAO,
+} from "./lib/templates-core.js";
+
+// --- normalizarHex ---------------------------------------------------------
+test("normalizarHex aceita hex de 6 digitos e minuscula", () => {
+  assert.equal(normalizarHex("#AABBCC"), "#aabbcc");
+});
+
+test("normalizarHex expande a forma curta de 3 digitos", () => {
+  assert.equal(normalizarHex("#abc"), "#aabbcc");
+});
+
+test("normalizarHex devolve o padrao para lixo", () => {
+  assert.equal(normalizarHex("nao-e-cor", "#000000"), "#000000");
+  assert.equal(normalizarHex(null), null);
+  assert.equal(normalizarHex(undefined, "#123456"), "#123456");
+});
+
+// --- misturar / elevar -----------------------------------------------------
+test("misturar a 0% devolve a base e a 100% devolve o alvo", () => {
+  assert.equal(misturar("#000000", "#ffffff", 0), "#000000");
+  assert.equal(misturar("#000000", "#ffffff", 100), "#ffffff");
+});
+
+test("misturar a 50% preto->branco da cinza medio", () => {
+  assert.equal(misturar("#000000", "#ffffff", 50), "#808080");
+});
+
+test("misturar prende porcentagens fora da faixa", () => {
+  assert.equal(misturar("#000000", "#ffffff", 200), "#ffffff");
+  assert.equal(misturar("#000000", "#ffffff", -50), "#000000");
+});
+
+test("elevar preserva a matiz ao clarear (nao lava para branco)", () => {
+  // O dourado de referencia sobe para a variante clara exata do design.
+  assert.equal(elevar("#c8a96e", 12.5, 21), "#e8c98e");
+});
+
+test("elevar com delta negativo escurece", () => {
+  assert.ok(luminancia(elevar("#808080", -20)) < luminancia("#808080"));
+});
+
+// --- contraste / luminancia ------------------------------------------------
+test("contraste preto x branco e o maximo (21:1)", () => {
+  assert.equal(Math.round(contraste("#000000", "#ffffff")), 21);
+});
+
+test("contraste e simetrico", () => {
+  assert.equal(
+    contraste("#0d0d0d", "#f0ede8").toFixed(4),
+    contraste("#f0ede8", "#0d0d0d").toFixed(4),
+  );
+});
+
+test("ehEscuro classifica fundos escuros e claros", () => {
+  assert.equal(ehEscuro("#0d0d0d"), true);
+  assert.equal(ehEscuro("#f6f4ef"), false);
+});
+
+test("melhorContraste escolhe o candidato mais legivel sobre o fundo", () => {
+  assert.equal(melhorContraste("#ffb454", ["#0a0e14", "#dbe6ef"]), "#0a0e14");
+  assert.equal(melhorContraste("#7a2138", ["#0d0d0d", "#f0ede8"]), "#f0ede8");
+});
+
+// --- garantirContraste (a trava de legibilidade) ---------------------------
+test("garantirContraste mantem a cor quando ja passa", () => {
+  assert.equal(garantirContraste("#f0ede8", "#0d0d0d", 4.5), "#f0ede8");
+});
+
+test("garantirContraste clareia um vinho quase-preto sobre fundo escuro", () => {
+  const ajustada = garantirContraste("#1a0508", "#161616", 4.5);
+  assert.ok(
+    contraste(ajustada, "#161616") >= 4.5,
+    "deveria atingir o piso de 4.5:1",
+  );
+});
+
+test("garantirContraste escurece sobre fundo claro (mao inversa)", () => {
+  const ajustada = garantirContraste("#f0f0f0", "#f6f4ef", 4.5);
+  assert.ok(contraste(ajustada, "#f6f4ef") >= 4.5);
+  assert.ok(luminancia(ajustada) < luminancia("#f0f0f0"));
+});
+
+// --- catalogo e gating -----------------------------------------------------
+test("isTemplateId reconhece livres e premium, rejeita desconhecido", () => {
+  assert.equal(isTemplateId("classico"), true);
+  assert.equal(isTemplateId("atelier_noir"), true);
+  assert.equal(isTemplateId("inexistente"), false);
+  assert.equal(isTemplateId(null), false);
+});
+
+test("planoDoTemplate: livres nao exigem plano, premium exigem max", () => {
+  assert.equal(planoDoTemplate("classico"), null);
+  assert.equal(planoDoTemplate("moderno"), null);
+  assert.equal(planoDoTemplate("atelier_noir"), "max");
+  assert.equal(planoDoTemplate("blueprint_tecnico"), "max");
+  assert.equal(planoDoTemplate("swiss_studio"), "max");
+});
+
+test("podeUsarTemplate: todos veem os livres", () => {
+  for (const plano of ["basico", "pro", "max", "manual", null, undefined]) {
+    assert.equal(podeUsarTemplate(plano, "classico"), true);
+  }
+});
+
+test("podeUsarTemplate: so o plano max libera os premium", () => {
+  for (const id of TEMPLATES_MAX) {
+    assert.equal(podeUsarTemplate("max", id), true);
+    assert.equal(podeUsarTemplate("pro", id), false);
+    assert.equal(podeUsarTemplate("basico", id), false);
+    assert.equal(podeUsarTemplate("manual", id), false);
+    assert.equal(podeUsarTemplate(null, id), false);
+  }
+});
+
+test("podeUsarTemplate nega template desconhecido para qualquer plano", () => {
+  assert.equal(podeUsarTemplate("max", "inexistente"), false);
+});
+
+test("templatesDisponiveis: nao-max ve 3, max ve 6", () => {
+  assert.equal(templatesDisponiveis("pro").length, 3);
+  assert.equal(templatesDisponiveis("max").length, 6);
+  assert.equal(templatesDisponiveis(null).length, 3);
+});
+
+test("resolverTemplate: max mantem o premium; nao-max cai no padrao", () => {
+  assert.equal(resolverTemplate("max", "atelier_noir"), "atelier_noir");
+  assert.equal(resolverTemplate("pro", "atelier_noir"), TEMPLATE_PADRAO);
+  assert.equal(resolverTemplate(null, "swiss_studio"), TEMPLATE_PADRAO);
+  // Downgrade nao vaza layout pago:
+  assert.equal(resolverTemplate("basico", "blueprint_tecnico"), "classico");
+  // Id invalido nunca renderiza:
+  assert.equal(resolverTemplate("max", "lixo"), TEMPLATE_PADRAO);
+});
+
+// --- paletas ---------------------------------------------------------------
+test("paletaEfetiva sem overrides devolve a paleta padrao", () => {
+  const p = paletaEfetiva("atelier_noir", null);
+  assert.equal(p.dourado, "#c8a96e");
+  assert.equal(p.vinho, "#7a2138");
+});
+
+test("paletaEfetiva aplica so os overrides validos do tenant", () => {
+  const p = paletaEfetiva("atelier_noir", {
+    atelier_noir: { dourado: "#d4b57a", vinho: "cor-invalida" },
+  });
+  assert.equal(p.dourado, "#d4b57a"); // valido aplicado
+  assert.equal(p.vinho, "#7a2138"); // invalido cai no padrao
+});
+
+test("paletaEfetiva ignora jsonb malformado sem lancar", () => {
+  assert.equal(paletaEfetiva("atelier_noir", "nao-e-objeto").dourado, "#c8a96e");
+  assert.equal(paletaEfetiva("atelier_noir", [1, 2, 3]).dourado, "#c8a96e");
+  assert.equal(paletaEfetiva("inexistente", null), null);
+});
+
+// --- derivarTema: contraste garantido em toda a paleta ---------------------
+test("derivarTema produz superficies de referencia a partir dos fundos", () => {
+  assert.equal(derivarTema("atelier_noir", null).superficie, "#161616");
+  assert.equal(derivarTema("blueprint_tecnico", null).superficie, "#101620");
+});
+
+test("derivarTema: texto e acento sempre passam o piso de contraste", () => {
+  for (const id of TEMPLATES_MAX) {
+    const t = derivarTema(id, null);
+    assert.ok(
+      contraste(t.texto, t.superficie) >= 7,
+      `${id}: texto principal deve ter ao menos 7:1`,
+    );
+    assert.ok(
+      contraste(t.textoSuave, t.superficie) >= 4.5,
+      `${id}: texto suave deve ter ao menos 4.5:1`,
+    );
+    assert.ok(
+      contraste(t.sobreAcento, t.acento) >= 4.5,
+      `${id}: texto sobre o acento deve ter ao menos 4.5:1`,
+    );
+  }
+});
+
+test("derivarTema mantem contraste mesmo com cor hostil do usuario", () => {
+  // Usuario escolhe um dourado escurissimo -- o texto do acento se ajusta.
+  const t = derivarTema("atelier_noir", {
+    atelier_noir: { dourado: "#2b2410" },
+  });
+  assert.ok(contraste(t.acentoTexto, t.superficie) >= 4.5);
+});
+
+test("derivarTema devolve null para template sem paleta", () => {
+  assert.equal(derivarTema("classico", null), null);
+  assert.equal(derivarTema("moderno", null), null);
+});

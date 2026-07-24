@@ -11,6 +11,9 @@ import {
   Check,
   BookmarkPlus,
   ListPlus,
+  Lock,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
@@ -22,6 +25,7 @@ import {
   TemplateSimples,
   type TipoTemplate,
 } from "./orcamento-templates";
+import { podeUsarTemplate } from "@/lib/templates-core";
 
 type ServicoItem = {
   id: string;
@@ -1451,6 +1455,85 @@ export function OrcamentosManager() {
                   </button>
                 );
               })}
+            </div>
+
+            {/* Templates premium (Plano Max) — gating por plano. Renderizam
+                conteúdo de demonstração e são preenchidos pelo editor de blocos
+                (etapa posterior); aqui ficam registrados e travados conforme o
+                plano do tenant. */}
+            <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800">
+              <div className="mb-2 flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-amber-500" />
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+                  {dict.orc.premiumTitulo}
+                </h4>
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                  Max
+                </span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    {
+                      v: "atelier_noir",
+                      titulo: dict.orc.atelierNoir,
+                      desc: dict.orc.atelierNoirDesc,
+                    },
+                    {
+                      v: "blueprint_tecnico",
+                      titulo: dict.orc.blueprintTecnico,
+                      desc: dict.orc.blueprintTecnicoDesc,
+                    },
+                    {
+                      v: "swiss_studio",
+                      titulo: dict.orc.swissStudio,
+                      desc: dict.orc.swissStudioDesc,
+                    },
+                  ] as const
+                ).map((opt) => {
+                  const liberado = podeUsarTemplate(tenant?.plano, opt.v);
+                  return (
+                    <div
+                      key={opt.v}
+                      className={`relative rounded-lg border p-3 ${
+                        liberado
+                          ? "border-amber-300 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-500/5"
+                          : "border-gray-200 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-900/40"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-sm font-semibold ${
+                            liberado
+                              ? "text-gray-900 dark:text-gray-100"
+                              : "text-gray-500 dark:text-gray-400"
+                          }`}
+                        >
+                          {opt.titulo}
+                        </span>
+                        {liberado ? null : (
+                          <Lock className="size-3 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        {opt.desc}
+                      </div>
+                      <a
+                        href="/preview-templates"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:underline dark:text-amber-400"
+                      >
+                        <ExternalLink className="size-3" />
+                        {liberado ? dict.orc.premiumVer : dict.orc.premiumUpgrade}
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+                {dict.orc.premiumNota}
+              </p>
             </div>
           </section>
 

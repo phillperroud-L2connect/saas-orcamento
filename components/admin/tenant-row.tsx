@@ -29,6 +29,7 @@ const PAIS_LABEL: Record<string, string> = {
 const PLANO_LABEL: Record<string, string> = {
   basico: "Básico",
   pro: "Pro",
+  max: "Max",
   manual: "Manual",
 };
 
@@ -348,6 +349,7 @@ export function TenantRow({ tenant, pagamentos }: Props) {
                   >
                     <option value="basico">Básico</option>
                     <option value="pro">Pro</option>
+                    <option value="max">Max</option>
                     <option value="manual">Manual</option>
                   </select>
                 </div>
