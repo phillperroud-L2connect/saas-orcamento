@@ -11,8 +11,10 @@
  *   moderno  -> cores da marca do tenant, cabeçalho colorido, sofisticado
  *   simples  -> ultra compacto, sem tabelas, direto ao ponto
  */
+import { Fragment, type ReactNode } from "react";
 import type { Tenant } from "@/lib/types";
 import type { Dict } from "@/lib/i18n";
+import { resolverBlocos } from "@/lib/blocos-core";
 // Import apenas de tipos (apagado em runtime) — não cria ciclo de import.
 import type { FormState, PlanoPagamento } from "./orcamentos-manager";
 
@@ -33,6 +35,12 @@ export type TemplateProps = {
   linkPagamento?: string | null;
   /** QR code do link de pagamento como data URL (PNG). */
   qrPagamento?: string | null;
+  /**
+   * Blocos ocultos neste orçamento (feature "esconder blocos", Plano Max).
+   * Ausente/null/[] → documento completo, na ordem canônica (comportamento
+   * padrão). O motor puro em lib/blocos-core decide o que renderizar.
+   */
+  ocultos?: string[] | null;
 };
 
 /** Rótulos do box "Pagar online" (inline pt/es). */
@@ -161,11 +169,11 @@ export function TemplateClassico({
   fmt,
   linkPagamento,
   qrPagamento,
+  ocultos,
 }: TemplateProps) {
   const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
-  return (
-    <div style={{ padding: "40px", fontSize: "13px", lineHeight: 1.5 }}>
-      {/* Header */}
+  const blocos: Record<string, () => ReactNode> = {
+    cabecalho: () => (
       <div
         style={{
           display: "flex",
@@ -221,8 +229,8 @@ export function TemplateClassico({
           </div>
         </div>
       </div>
-
-      {/* Cliente */}
+    ),
+    cliente: () => (
       <div
         style={{
           marginBottom: "28px",
@@ -245,8 +253,8 @@ export function TemplateClassico({
           <div style={{ color: "#555" }}>{form.cliente_telefone}</div>
         )}
       </div>
-
-      {/* Serviços */}
+    ),
+    servicos: () => (
       <div style={{ marginBottom: "28px" }}>
         <div
           style={{
@@ -334,8 +342,8 @@ export function TemplateClassico({
           </tfoot>
         </table>
       </div>
-
-      {/* Condições de pagamento */}
+    ),
+    pagamento: () => (
       <div
         style={{
           marginBottom: "24px",
@@ -487,8 +495,8 @@ export function TemplateClassico({
           )}
         </div>
       </div>
-
-      {/* Pagar online (link + QR) */}
+    ),
+    pagar_online: () => (
       <BoxPagarOnline
         link={linkPagamento}
         qr={qrPagamento}
@@ -496,9 +504,9 @@ export function TemplateClassico({
         corSuave={corSuave}
         idioma={idioma}
       />
-
-      {/* Nota adicional */}
-      {form.nota && (
+    ),
+    nota: () =>
+      form.nota ? (
         <div
           style={{
             marginBottom: "24px",
@@ -512,9 +520,8 @@ export function TemplateClassico({
         >
           {form.nota}
         </div>
-      )}
-
-      {/* Rodapé */}
+      ) : null,
+    rodape: () => (
       <div
         style={{
           marginTop: "40px",
@@ -539,6 +546,13 @@ export function TemplateClassico({
           </div>
         )}
       </div>
+    ),
+  };
+  return (
+    <div style={{ padding: "40px", fontSize: "13px", lineHeight: 1.5 }}>
+      {resolverBlocos("classico", ocultos).map((id) => (
+        <Fragment key={id}>{blocos[id]?.()}</Fragment>
+      ))}
     </div>
   );
 }
@@ -559,11 +573,14 @@ export function TemplateModerno({
   fmt,
   linkPagamento,
   qrPagamento,
+  ocultos,
 }: TemplateProps) {
   const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
-  return (
-    <div style={{ fontSize: "13px", lineHeight: 1.5 }}>
-      {/* Faixa de cabeçalho na cor da marca */}
+  // O cabeçalho é uma faixa full-bleed FORA do container com padding; os demais
+  // blocos vivem dentro dele. Por isso o cabeçalho é tratado à parte e o restante
+  // dos blocos é resolvido e mapeado dentro do container.
+  const blocos: Record<string, () => ReactNode> = {
+    cabecalho: () => (
       <div
         style={{
           background: cor,
@@ -628,305 +645,313 @@ export function TemplateModerno({
           </div>
         </div>
       </div>
-
-      <div style={{ padding: "32px 40px" }}>
-        {/* Cliente */}
+    ),
+    cliente: () => (
+      <div
+        style={{
+          marginBottom: "28px",
+          background: corSuave,
+          borderRadius: "12px",
+          padding: "20px",
+        }}
+      >
         <div
           style={{
-            marginBottom: "28px",
-            background: corSuave,
-            borderRadius: "12px",
-            padding: "20px",
+            fontWeight: 700,
+            color: cor,
+            marginBottom: "8px",
+            textTransform: "uppercase",
+            fontSize: "11px",
+            letterSpacing: "1px",
           }}
         >
-          <div
-            style={{
-              fontWeight: 700,
-              color: cor,
-              marginBottom: "8px",
-              textTransform: "uppercase",
-              fontSize: "11px",
-              letterSpacing: "1px",
-            }}
-          >
-            {dict.pdf.cliente}
-          </div>
-          <div style={{ fontWeight: 700, fontSize: "16px" }}>
-            {form.cliente_nome || dict.pdf.nomeCliente}
-          </div>
-          {(form.cliente_email || form.cliente_telefone) && (
-            <div style={{ color: "#555", marginTop: "4px" }}>
-              {[form.cliente_email, form.cliente_telefone]
-                .filter(Boolean)
-                .join("  ·  ")}
-            </div>
-          )}
+          {dict.pdf.cliente}
         </div>
-
-        {/* Serviços */}
-        <div style={{ marginBottom: "24px" }}>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              borderRadius: "12px",
-              overflow: "hidden",
-              border: `1px solid ${corSuave}`,
-            }}
-          >
-            <thead>
-              <tr style={{ background: cor, color: "#fff" }}>
-                <th
-                  style={{
-                    padding: "14px 16px",
-                    textAlign: "left",
-                    fontWeight: 600,
-                    fontSize: "12px",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                  }}
+        <div style={{ fontWeight: 700, fontSize: "16px" }}>
+          {form.cliente_nome || dict.pdf.nomeCliente}
+        </div>
+        {(form.cliente_email || form.cliente_telefone) && (
+          <div style={{ color: "#555", marginTop: "4px" }}>
+            {[form.cliente_email, form.cliente_telefone]
+              .filter(Boolean)
+              .join("  ·  ")}
+          </div>
+        )}
+      </div>
+    ),
+    servicos: () => (
+      <div style={{ marginBottom: "24px" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            borderRadius: "12px",
+            overflow: "hidden",
+            border: `1px solid ${corSuave}`,
+          }}
+        >
+          <thead>
+            <tr style={{ background: cor, color: "#fff" }}>
+              <th
+                style={{
+                  padding: "14px 16px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  fontSize: "12px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                {dict.pdf.servico}
+              </th>
+              <th
+                style={{
+                  padding: "14px 16px",
+                  textAlign: "right",
+                  fontWeight: 600,
+                  fontSize: "12px",
+                  width: "150px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                {dict.pdf.valor}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {form.servicos
+              .filter((s) => s.descricao || s.valor)
+              .map((s, i) => (
+                <tr
+                  key={s.id}
+                  style={{ background: i % 2 === 0 ? "#fff" : corSuave }}
                 >
-                  {dict.pdf.servico}
-                </th>
-                <th
-                  style={{
-                    padding: "14px 16px",
-                    textAlign: "right",
-                    fontWeight: 600,
-                    fontSize: "12px",
-                    width: "150px",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                  }}
-                >
-                  {dict.pdf.valor}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {form.servicos
-                .filter((s) => s.descricao || s.valor)
-                .map((s, i) => (
-                  <tr
-                    key={s.id}
-                    style={{ background: i % 2 === 0 ? "#fff" : corSuave }}
+                  <td style={{ padding: "12px 16px" }}>
+                    {s.descricao || dict.orc.servicoN(i + 1)}
+                  </td>
+                  <td
+                    style={{
+                      padding: "12px 16px",
+                      textAlign: "right",
+                      fontWeight: 600,
+                    }}
                   >
-                    <td style={{ padding: "12px 16px" }}>
-                      {s.descricao || dict.orc.servicoN(i + 1)}
-                    </td>
-                    <td
-                      style={{
-                        padding: "12px 16px",
-                        textAlign: "right",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {fmt(parseFloat(s.valor) || 0)}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Total em destaque */}
-        <div
+                    {fmt(parseFloat(s.valor) || 0)}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    ),
+    total: () => (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: cor,
+          color: "#fff",
+          borderRadius: "12px",
+          padding: "18px 24px",
+          marginBottom: "24px",
+        }}
+      >
+        <span
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            background: cor,
-            color: "#fff",
-            borderRadius: "12px",
-            padding: "18px 24px",
-            marginBottom: "24px",
+            fontSize: "13px",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            fontWeight: 600,
           }}
         >
-          <span
-            style={{
-              fontSize: "13px",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              fontWeight: 600,
-            }}
-          >
-            {dict.pdf.total}
-          </span>
-          <span style={{ fontSize: "26px", fontWeight: 800 }}>
-            {fmt(total)}
-          </span>
+          {dict.pdf.total}
+        </span>
+        <span style={{ fontSize: "26px", fontWeight: 800 }}>{fmt(total)}</span>
+      </div>
+    ),
+    pagamento: () => (
+      <div style={{ marginBottom: "24px" }}>
+        <div
+          style={{
+            fontWeight: 700,
+            color: cor,
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            marginBottom: "12px",
+          }}
+        >
+          {dict.pdf.pagamento}
         </div>
 
-        {/* Condições de pagamento */}
-        <div style={{ marginBottom: "24px" }}>
-          <div
-            style={{
-              fontWeight: 700,
-              color: cor,
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              marginBottom: "12px",
-            }}
-          >
-            {dict.pdf.pagamento}
-          </div>
-
-          {plano.tipo === "unico" && (
-            <div style={{ fontSize: "13px", color: "#555" }}>
-              {dict.pdf.pagamentoAVistaValor(fmt(total))}
-            </div>
-          )}
-
-          {plano.tipo === "entrada_restante" && (
-            <div style={{ display: "flex", gap: "16px" }}>
-              <div
-                style={{
-                  flex: 1,
-                  textAlign: "center",
-                  background: corSuave,
-                  borderRadius: "12px",
-                  padding: "16px",
-                }}
-              >
-                <div
-                  style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}
-                >
-                  {dict.pdf.entradaPct(plano.pct)}
-                </div>
-                <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                  {fmt(plano.entrada)}
-                </div>
-              </div>
-              <div
-                style={{
-                  flex: 1,
-                  textAlign: "center",
-                  background: corSuave,
-                  borderRadius: "12px",
-                  padding: "16px",
-                }}
-              >
-                <div
-                  style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}
-                >
-                  {dict.pdf.restantePct(Number((100 - plano.pct).toFixed(0)))}
-                </div>
-                <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
-                  {fmt(plano.restante)}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {plano.tipo === "parcelado" && (
-            <>
-              <div
-                style={{ marginBottom: "10px", fontSize: "12px", color: "#555" }}
-              >
-                {plano.subtipo === "entrada_diferenciada"
-                  ? dict.pdf.parceladoEntradaDif(plano.n)
-                  : dict.pdf.parceladoIguais(plano.n)}
-              </div>
-              <div
-                style={{
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                  border: `1px solid ${corSuave}`,
-                }}
-              >
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <tbody>
-                    {plano.parcelas.map((p, i) => (
-                      <tr
-                        key={p.numero}
-                        style={{ background: i % 2 === 0 ? "#fff" : corSuave }}
-                      >
-                        <td
-                          style={{
-                            padding: "10px 16px",
-                            fontSize: "12px",
-                            color: "#444",
-                          }}
-                        >
-                          {p.entrada
-                            ? dict.pdf.entradaPrimeira
-                            : dict.pdf.parcelaN(p.numero)}
-                        </td>
-                        <td
-                          style={{
-                            padding: "10px 16px",
-                            textAlign: "right",
-                            fontWeight: 700,
-                            color: cor,
-                            fontSize: "13px",
-                          }}
-                        >
-                          {fmt(p.valor)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Pagar online (link + QR) */}
-        <BoxPagarOnline
-          link={linkPagamento}
-          qr={qrPagamento}
-          cor={cor}
-          corSuave={corSuave}
-          idioma={idioma}
-        />
-
-        {/* Nota adicional */}
-        {form.nota && (
-          <div
-            style={{
-              marginBottom: "24px",
-              padding: "14px 18px",
-              background: corSuave,
-              borderLeft: `4px solid ${cor}`,
-              borderRadius: "8px",
-              fontSize: "12px",
-              color: "#555",
-            }}
-          >
-            {form.nota}
+        {plano.tipo === "unico" && (
+          <div style={{ fontSize: "13px", color: "#555" }}>
+            {dict.pdf.pagamentoAVistaValor(fmt(total))}
           </div>
         )}
 
-        {/* Rodapé */}
-        <div
-          style={{
-            marginTop: "32px",
-            textAlign: "center",
-            borderTop: `2px solid ${corSuave}`,
-            paddingTop: "16px",
-          }}
-        >
-          <div style={{ color: cor, fontSize: "12px", fontWeight: 600 }}>
-            {dict.pdf.rodape}
-          </div>
-          {tenant && (
+        {plano.tipo === "entrada_restante" && (
+          <div style={{ display: "flex", gap: "16px" }}>
             <div
               style={{
-                marginTop: "6px",
-                color: "#999",
-                fontSize: "10px",
-                letterSpacing: "0.3px",
+                flex: 1,
+                textAlign: "center",
+                background: corSuave,
+                borderRadius: "12px",
+                padding: "16px",
               }}
             >
-              {[tenant.nome_empresa, tenant.email, tenant.telefone]
-                .filter(Boolean)
-                .join(" | ")}
+              <div
+                style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}
+              >
+                {dict.pdf.entradaPct(plano.pct)}
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
+                {fmt(plano.entrada)}
+              </div>
             </div>
-          )}
+            <div
+              style={{
+                flex: 1,
+                textAlign: "center",
+                background: corSuave,
+                borderRadius: "12px",
+                padding: "16px",
+              }}
+            >
+              <div
+                style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}
+              >
+                {dict.pdf.restantePct(Number((100 - plano.pct).toFixed(0)))}
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: 800, color: cor }}>
+                {fmt(plano.restante)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {plano.tipo === "parcelado" && (
+          <>
+            <div
+              style={{ marginBottom: "10px", fontSize: "12px", color: "#555" }}
+            >
+              {plano.subtipo === "entrada_diferenciada"
+                ? dict.pdf.parceladoEntradaDif(plano.n)
+                : dict.pdf.parceladoIguais(plano.n)}
+            </div>
+            <div
+              style={{
+                borderRadius: "12px",
+                overflow: "hidden",
+                border: `1px solid ${corSuave}`,
+              }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  {plano.parcelas.map((p, i) => (
+                    <tr
+                      key={p.numero}
+                      style={{ background: i % 2 === 0 ? "#fff" : corSuave }}
+                    >
+                      <td
+                        style={{
+                          padding: "10px 16px",
+                          fontSize: "12px",
+                          color: "#444",
+                        }}
+                      >
+                        {p.entrada
+                          ? dict.pdf.entradaPrimeira
+                          : dict.pdf.parcelaN(p.numero)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "10px 16px",
+                          textAlign: "right",
+                          fontWeight: 700,
+                          color: cor,
+                          fontSize: "13px",
+                        }}
+                      >
+                        {fmt(p.valor)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    ),
+    pagar_online: () => (
+      <BoxPagarOnline
+        link={linkPagamento}
+        qr={qrPagamento}
+        cor={cor}
+        corSuave={corSuave}
+        idioma={idioma}
+      />
+    ),
+    nota: () =>
+      form.nota ? (
+        <div
+          style={{
+            marginBottom: "24px",
+            padding: "14px 18px",
+            background: corSuave,
+            borderLeft: `4px solid ${cor}`,
+            borderRadius: "8px",
+            fontSize: "12px",
+            color: "#555",
+          }}
+        >
+          {form.nota}
         </div>
+      ) : null,
+    rodape: () => (
+      <div
+        style={{
+          marginTop: "32px",
+          textAlign: "center",
+          borderTop: `2px solid ${corSuave}`,
+          paddingTop: "16px",
+        }}
+      >
+        <div style={{ color: cor, fontSize: "12px", fontWeight: 600 }}>
+          {dict.pdf.rodape}
+        </div>
+        {tenant && (
+          <div
+            style={{
+              marginTop: "6px",
+              color: "#999",
+              fontSize: "10px",
+              letterSpacing: "0.3px",
+            }}
+          >
+            {[tenant.nome_empresa, tenant.email, tenant.telefone]
+              .filter(Boolean)
+              .join(" | ")}
+          </div>
+        )}
+      </div>
+    ),
+  };
+  const visiveis = resolverBlocos("moderno", ocultos);
+  return (
+    <div style={{ fontSize: "13px", lineHeight: 1.5 }}>
+      {visiveis.includes("cabecalho") && blocos.cabecalho()}
+      <div style={{ padding: "32px 40px" }}>
+        {visiveis
+          .filter((id) => id !== "cabecalho")
+          .map((id) => (
+            <Fragment key={id}>{blocos[id]?.()}</Fragment>
+          ))}
       </div>
     </div>
   );
@@ -948,18 +973,11 @@ export function TemplateSimples({
   corSuave,
   linkPagamento,
   qrPagamento,
+  ocultos,
 }: TemplateProps) {
   const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
-  return (
-    <div
-      style={{
-        padding: "32px 36px",
-        fontSize: "13px",
-        lineHeight: 1.45,
-        color: "#222",
-      }}
-    >
-      {/* Topo: empresa + número/data em uma linha */}
+  const blocos: Record<string, () => ReactNode> = {
+    cabecalho: () => (
       <div
         style={{
           display: "flex",
@@ -980,15 +998,15 @@ export function TemplateSimples({
           <div>{dataHoje}</div>
         </div>
       </div>
-
-      {/* Cliente em uma linha */}
+    ),
+    cliente: () => (
       <div style={{ marginBottom: "18px" }}>
         <strong>{dict.pdf.cliente}:</strong> {form.cliente_nome || "—"}
         {form.cliente_telefone ? `  ·  ${form.cliente_telefone}` : ""}
         {form.cliente_email ? `  ·  ${form.cliente_email}` : ""}
       </div>
-
-      {/* Serviços como lista simples (sem tabela) */}
+    ),
+    servicos: () => (
       <div style={{ marginBottom: "8px" }}>
         {form.servicos
           .filter((s) => s.descricao || s.valor)
@@ -1016,8 +1034,8 @@ export function TemplateSimples({
             </div>
           ))}
       </div>
-
-      {/* Total */}
+    ),
+    total: () => (
       <div
         style={{
           display: "flex",
@@ -1039,24 +1057,21 @@ export function TemplateSimples({
         >
           {dict.pdf.total}
         </span>
-        <span style={{ fontSize: "20px", fontWeight: 800 }}>
-          {fmt(total)}
-        </span>
+        <span style={{ fontSize: "20px", fontWeight: 800 }}>{fmt(total)}</span>
       </div>
-
-      {/* Pagamento em uma linha (resumo do plano) */}
+    ),
+    pagamento: () => (
       <div style={{ fontSize: "12px", color: "#444", marginBottom: "10px" }}>
         <strong>{dict.pdf.pagamento}:</strong> {plano.resumo}
       </div>
-
-      {/* Nota */}
-      {form.nota && (
+    ),
+    nota: () =>
+      form.nota ? (
         <div style={{ fontSize: "12px", color: "#555", marginBottom: "10px" }}>
           {form.nota}
         </div>
-      )}
-
-      {/* Pagar online (link + QR) */}
+      ) : null,
+    pagar_online: () => (
       <div style={{ marginTop: "16px" }}>
         <BoxPagarOnline
           link={linkPagamento}
@@ -1066,13 +1081,27 @@ export function TemplateSimples({
           idioma={idioma}
         />
       </div>
-
-      {/* Rodapé minimalista */}
+    ),
+    rodape: () => (
       <div style={{ marginTop: "24px", fontSize: "11px", color: "#999" }}>
         {[tenant?.nome_empresa, tenant?.email, tenant?.telefone]
           .filter(Boolean)
           .join("  ·  ")}
       </div>
+    ),
+  };
+  return (
+    <div
+      style={{
+        padding: "32px 36px",
+        fontSize: "13px",
+        lineHeight: 1.45,
+        color: "#222",
+      }}
+    >
+      {resolverBlocos("simples", ocultos).map((id) => (
+        <Fragment key={id}>{blocos[id]?.()}</Fragment>
+      ))}
     </div>
   );
 }
