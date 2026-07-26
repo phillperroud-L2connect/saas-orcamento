@@ -22,9 +22,85 @@ import {
   type PaletaOverrides,
 } from "@/lib/templates-core";
 import { FONTES } from "@/lib/fontes-templates";
-import { TEMPLATES_PREMIUM } from "@/components/templates-premium";
+import {
+  TEMPLATES_PREMIUM,
+  TemplateAtelierNoir,
+  TemplateBlueprintTecnico,
+  TemplateSwissStudio,
+} from "@/components/templates-premium";
+import { getDict } from "@/lib/i18n";
+import type { TemplateProps } from "@/components/orcamento-templates";
+import type { FormState, PlanoPagamento } from "@/components/orcamentos-manager";
+import type { Tenant } from "@/lib/types";
 
 type TemplateMax = keyof typeof TEMPLATES_PREMIUM;
+
+/**
+ * Orçamento de exemplo para os templates premium JÁ convertidos (Atelier, 3a).
+ * O showcase deixa de mostrar o menu fictício e passa a mostrar o layout de
+ * orçamento real — o editor de paleta continua provando que trocar cor não
+ * quebra o documento. `idioma` só troca a moeda/rótulos do exemplo.
+ */
+function exemploOrcamento(idioma: "pt" | "es"): TemplateProps {
+  const dict = getDict(idioma);
+  const moeda = idioma === "es" ? "ARS" : "BRL";
+  const locale = idioma === "es" ? "es-AR" : "pt-BR";
+  const fmt = (v: number) =>
+    new Intl.NumberFormat(locale, { style: "currency", currency: moeda }).format(
+      v || 0,
+    );
+  const servicos = [
+    { id: "1", descricao: "Landing page institucional (5 seções)", valor: "6500" },
+    { id: "2", descricao: "Integração de formulário + e-mail", valor: "2000" },
+    { id: "3", descricao: "SEO técnico e performance", valor: "4000" },
+  ];
+  const total = 12500;
+  const form = {
+    cliente_id: "c1",
+    cliente_nome: "Maria Fernanda Oliveira",
+    cliente_email: "maria.oliveira@exemplo.com",
+    cliente_telefone: "(11) 98888-1234",
+    cliente_documento: "",
+    cliente_endereco: "",
+    servicos,
+    nota: "Valores válidos por 15 dias. Não inclui domínio nem hospedagem.",
+    opcao_pagamento: "entrada_restante",
+    percentual_entrada: "50",
+    parcelas: "3",
+    tipo_parcelamento: "iguais",
+    entrada_tipo: "percentual",
+    entrada_valor: "30",
+    template: "classico",
+  } as unknown as FormState;
+  const plano: PlanoPagamento = {
+    tipo: "entrada_restante",
+    pct: 50,
+    entrada: total * 0.5,
+    restante: total * 0.5,
+    resumo: dict.resumo.entradaRestante(50, fmt(total * 0.5), fmt(total * 0.5)),
+  };
+  const tenant = {
+    nome_empresa: "Estúdio Aurora",
+    nome_profissional: "João Pedro Martins",
+    email: "contato@estudioaurora.com",
+    telefone: "(11) 3333-4444",
+    idioma,
+  } as unknown as Tenant;
+  return {
+    form,
+    total,
+    plano,
+    tenant,
+    cor: "#000000",
+    corSuave: "#f5f5f5",
+    numero: "0042",
+    dataHoje: idioma === "es" ? "26/07/2026" : "26/07/2026",
+    dict,
+    fmt,
+    linkPagamento: "https://exemplo.com/pagar/abc123",
+    qrPagamento: null,
+  };
+}
 
 const META: Record<TemplateMax, { nome: string; nota: string }> = {
   atelier_noir: {
@@ -72,7 +148,6 @@ function PainelTemplate({
   );
 
   const tema = useMemo(() => derivarTema(id, overrides), [id, overrides]);
-  const Componente = TEMPLATES_PREMIUM[id];
   const meta = META[id];
 
   if (!tema) return null;
@@ -158,7 +233,17 @@ function PainelTemplate({
           overflow: "hidden",
         }}
       >
-        <Componente tema={tema} fontes={FONTES} idioma={idioma} />
+        {id === "atelier_noir" ? (
+          <TemplateAtelierNoir
+            {...exemploOrcamento(idioma)}
+            tema={tema}
+            fontes={FONTES}
+          />
+        ) : id === "blueprint_tecnico" ? (
+          <TemplateBlueprintTecnico tema={tema} fontes={FONTES} idioma={idioma} />
+        ) : (
+          <TemplateSwissStudio tema={tema} fontes={FONTES} idioma={idioma} />
+        )}
       </div>
     </section>
   );

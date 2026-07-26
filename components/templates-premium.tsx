@@ -15,28 +15,74 @@
  *
  * O conteúdo é 100% fictício (Studio Exemplo) — ver templates-premium-conteudo.
  */
+import { Fragment } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { TemaTemplate } from "@/lib/templates-core";
 import type { FONTES } from "@/lib/fontes-templates";
+import { resolverBlocos } from "@/lib/blocos-core";
+import type { TemplateProps } from "./orcamento-templates";
 import { conteudoDemo, type ItemServico } from "./templates-premium-conteudo";
 
 type Fontes = typeof FONTES;
 
-export type TemplatePremiumProps = {
+/**
+ * Props dos templates premium já convertidos em orçamento real (recebem os
+ * MESMOS dados dos 3 básicos, mais o `tema` derivado e as `fontes`). A partir da
+ * Etapa 3, é o contrato do Atelier Noir; Blueprint e Swiss migram nas 3b/3c.
+ */
+export type TemplatePremiumProps = TemplateProps & {
+  tema: TemaTemplate;
+  fontes: Fontes;
+};
+
+/**
+ * Props do modo DEMO (conteúdo fictício "Studio Exemplo"), ainda usado por
+ * Blueprint e Swiss até serem convertidos. Some quando 3b/3c terminarem.
+ */
+export type TemplatePremiumDemoProps = {
   tema: TemaTemplate;
   fontes: Fontes;
   idioma?: string;
 };
 
+/** Rótulos do box "Pagar online" (inline pt/es) — espelha os 3 básicos. */
+const PAGAR_LABELS = {
+  pt: {
+    titulo: "Pague online",
+    clique: "Clique aqui para pagar",
+    qr: "Ou aponte a câmera para o QR Code",
+  },
+  es: {
+    titulo: "Pagá online",
+    clique: "Hacé clic aquí para pagar",
+    qr: "O escaneá el QR con tu cámara",
+  },
+} as const;
+
 /* ===========================================================================
- * A) ATELIER NOIR — editorial de luxo
+ * A) ATELIER NOIR — editorial de luxo (orçamento real, 3a)
+ * --------------------------------------------------------------------------
+ * Recebe os MESMOS dados dos 3 básicos (form/total/plano/tenant/…), mais o
+ * `tema` derivado e as `fontes`. Renderiza por blocoId via resolverBlocos, na
+ * pele editorial do Atelier. banco_horas/projetos/condicoes ficam ocultos por
+ * padrão (BLOCOS_PADRAO_OCULTOS) — sem fonte de dado no formulário.
  * ======================================================================== */
 export function TemplateAtelierNoir({
+  form,
+  total,
+  plano,
+  tenant,
+  numero,
+  dataHoje,
+  dict,
+  fmt,
+  linkPagamento,
+  qrPagamento,
+  ocultos,
   tema,
   fontes,
-  idioma,
 }: TemplatePremiumProps) {
-  const c = conteudoDemo(idioma);
+  const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
   const serif = fontes.playfair;
   const sans = fontes.dmSans;
 
@@ -55,110 +101,464 @@ export function TemplateAtelierNoir({
     </div>
   );
 
-  const ServicoCard = (s: ItemServico) => (
-    <div
-      key={s.ordem}
-      style={{
-        background: tema.superficie,
-        borderTop: `2px solid ${tema.secundario}`,
-        borderRadius: tema.raio,
-        padding: "22px 24px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "14px",
-      }}
-    >
+  // Nome do estúdio em serifada; a última palavra ganha itálico dourado quando
+  // há 2+ palavras (fallback elegante para nomes de uma só palavra).
+  const nomeEstudio = (n: string): ReactNode => {
+    const partes = n.trim().split(/\s+/);
+    if (partes.length < 2) return n;
+    const ultima = partes[partes.length - 1];
+    const resto = partes.slice(0, -1).join(" ");
+    return (
+      <>
+        {resto}
+        <br />
+        <span style={{ fontStyle: "italic", color: tema.acentoTexto }}>
+          {ultima}
+        </span>
+      </>
+    );
+  };
+
+  const blocos: Record<string, () => ReactNode> = {
+    cabecalho: () => (
       <div
-        style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "24px",
+          marginBottom: "40px",
+        }}
       >
         <div>
+          {tenant?.nome_profissional ? kicker(tenant.nome_profissional) : null}
           <div
             style={{
               fontFamily: serif,
-              fontSize: "21px",
+              fontSize: "58px",
               fontWeight: 700,
+              lineHeight: 0.95,
+              letterSpacing: "-1px",
+              marginTop: "12px",
               color: tema.texto,
-              lineHeight: 1.1,
             }}
           >
-            {s.nome}
+            {nomeEstudio(tenant?.nome_empresa || "Sua Empresa")}
           </div>
+        </div>
+        <div
+          style={{ textAlign: "right", whiteSpace: "nowrap", paddingTop: "6px" }}
+        >
+          {(
+            [
+              [dict.pdf.numero, numero],
+              [dict.pdf.data, dataHoje],
+              [dict.pdf.validade, dict.pdf.validadeVal],
+            ] as const
+          ).map(([rotulo, valor]) => (
+            <div key={rotulo} style={{ marginBottom: "8px" }}>
+              <div
+                style={{
+                  fontFamily: sans,
+                  fontSize: "9px",
+                  letterSpacing: "2px",
+                  textTransform: "uppercase",
+                  color: tema.acentoTexto,
+                  fontWeight: 600,
+                }}
+              >
+                {rotulo}
+              </div>
+              <div
+                style={{
+                  fontFamily: sans,
+                  fontSize: "13px",
+                  color: tema.texto,
+                  marginTop: "2px",
+                }}
+              >
+                {valor}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+
+    cliente: () => (
+      <div
+        style={{
+          borderLeft: `2px solid ${tema.secundario}`,
+          paddingLeft: "16px",
+          marginBottom: "36px",
+        }}
+      >
+        {kicker(dict.pdf.cliente)}
+        <div
+          style={{
+            fontFamily: serif,
+            fontSize: "24px",
+            color: tema.texto,
+            marginTop: "8px",
+          }}
+        >
+          {form.cliente_nome || dict.pdf.nomeCliente}
+        </div>
+        {form.cliente_email || form.cliente_telefone ? (
           <div
             style={{
               fontFamily: sans,
               fontSize: "12px",
               color: tema.textoSuave,
               marginTop: "6px",
-              lineHeight: 1.5,
             }}
           >
-            {s.descricao}
+            {[form.cliente_email, form.cliente_telefone]
+              .filter(Boolean)
+              .join("  ·  ")}
           </div>
+        ) : null}
+      </div>
+    ),
+
+    servicos: () => (
+      <>
+        <div style={{ marginBottom: "16px" }}>{kicker(dict.pdf.servicos)}</div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+            marginBottom: "32px",
+          }}
+        >
+          {form.servicos
+            .filter((s) => s.descricao || s.valor)
+            .map((s, i) => (
+              <div
+                key={s.id}
+                style={{
+                  background: tema.superficie,
+                  borderTop: `2px solid ${tema.secundario}`,
+                  borderRadius: tema.raio,
+                  padding: "20px 24px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: serif,
+                    fontSize: "21px",
+                    fontWeight: 700,
+                    color: tema.texto,
+                    lineHeight: 1.15,
+                  }}
+                >
+                  {s.descricao || dict.orc.servicoN(i + 1)}
+                </div>
+                <div
+                  style={{
+                    fontFamily: serif,
+                    fontSize: "30px",
+                    fontWeight: 700,
+                    color: tema.acentoTextoGrande,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {fmt(parseFloat(s.valor) || 0)}
+                </div>
+              </div>
+            ))}
         </div>
-        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-          {s.tag ? (
+      </>
+    ),
+
+    total: () => (
+      <div
+        style={{
+          borderTop: `2px solid ${tema.secundario}`,
+          paddingTop: "18px",
+          marginBottom: "36px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: sans,
+            fontSize: "11px",
+            letterSpacing: "3px",
+            textTransform: "uppercase",
+            color: tema.acentoTexto,
+            fontWeight: 600,
+          }}
+        >
+          {dict.pdf.total}
+        </div>
+        <div
+          style={{
+            fontFamily: serif,
+            fontSize: "42px",
+            fontWeight: 700,
+            color: tema.acentoTextoGrande,
+            lineHeight: 1,
+          }}
+        >
+          {fmt(total)}
+        </div>
+      </div>
+    ),
+
+    pagamento: () => (
+      <div style={{ marginBottom: "36px" }}>
+        <div style={{ marginBottom: "14px" }}>{kicker(dict.pdf.pagamento)}</div>
+
+        {plano.tipo === "unico" && (
+          <div style={{ fontFamily: serif, fontSize: "20px", color: tema.texto }}>
+            {dict.pdf.pagamentoAVista} —{" "}
+            <span style={{ color: tema.acentoTextoGrande }}>{fmt(total)}</span>
+          </div>
+        )}
+
+        {plano.tipo === "entrada_restante" && (
+          <>
+            <div style={{ display: "flex", gap: "16px" }}>
+              <div
+                style={{
+                  flex: 1,
+                  background: tema.superficie,
+                  borderRadius: tema.raio,
+                  padding: "18px 20px",
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: sans,
+                    fontSize: "11px",
+                    color: tema.textoSuave,
+                    marginBottom: "6px",
+                  }}
+                >
+                  {dict.pdf.entradaPct(plano.pct)}
+                </div>
+                <div
+                  style={{
+                    fontFamily: serif,
+                    fontSize: "24px",
+                    fontWeight: 700,
+                    color: tema.acentoTextoGrande,
+                  }}
+                >
+                  {fmt(plano.entrada)}
+                </div>
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  background: tema.superficie,
+                  borderRadius: tema.raio,
+                  padding: "18px 20px",
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: sans,
+                    fontSize: "11px",
+                    color: tema.textoSuave,
+                    marginBottom: "6px",
+                  }}
+                >
+                  {dict.pdf.restantePct(Number((100 - plano.pct).toFixed(0)))}
+                </div>
+                <div
+                  style={{
+                    fontFamily: serif,
+                    fontSize: "24px",
+                    fontWeight: 700,
+                    color: tema.acentoTextoGrande,
+                  }}
+                >
+                  {fmt(plano.restante)}
+                </div>
+              </div>
+            </div>
             <div
               style={{
                 fontFamily: sans,
-                fontSize: "8px",
-                letterSpacing: "1.5px",
-                color: tema.sobreSecundario,
-                background: tema.secundario,
-                padding: "3px 7px",
-                borderRadius: tema.raio,
-                display: "inline-block",
-                marginBottom: "8px",
-                fontWeight: 700,
+                fontSize: "11px",
+                color: tema.textoSuave,
+                marginTop: "10px",
               }}
             >
-              {s.tag}
+              {dict.pdf.doisPagamentosNota}
             </div>
+          </>
+        )}
+
+        {plano.tipo === "parcelado" && (
+          <>
+            <div
+              style={{
+                fontFamily: sans,
+                fontSize: "12px",
+                color: tema.textoSuave,
+                marginBottom: "10px",
+              }}
+            >
+              {plano.subtipo === "entrada_diferenciada"
+                ? dict.pdf.parceladoEntradaDif(plano.n)
+                : dict.pdf.parceladoIguais(plano.n)}
+            </div>
+            <div>
+              {plano.parcelas.map((p, i) => (
+                <div
+                  key={p.numero}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    padding: "11px 0",
+                    borderTop: i === 0 ? "none" : `1px solid ${tema.hairline}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: sans,
+                      fontSize: "13px",
+                      color: tema.textoSuave,
+                    }}
+                  >
+                    {p.entrada
+                      ? dict.pdf.entradaPrimeira
+                      : dict.pdf.parcelaN(p.numero)}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: serif,
+                      fontSize: "18px",
+                      fontWeight: 700,
+                      color: tema.acentoTextoGrande,
+                    }}
+                  >
+                    {fmt(p.valor)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    ),
+
+    pagar_online: () => {
+      if (!linkPagamento) return null;
+      const t = PAGAR_LABELS[idioma] ?? PAGAR_LABELS.pt;
+      return (
+        <div
+          style={{
+            background: tema.superficie,
+            borderRadius: tema.raio,
+            padding: "22px 24px",
+            marginBottom: "36px",
+            display: "flex",
+            alignItems: "center",
+            gap: "24px",
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            {kicker(t.titulo)}
+            <div
+              style={{
+                fontFamily: sans,
+                fontSize: "13px",
+                color: tema.texto,
+                marginTop: "10px",
+              }}
+            >
+              {t.clique}
+            </div>
+            <div
+              style={{
+                fontFamily: sans,
+                fontSize: "12px",
+                color: tema.acentoTexto,
+                marginTop: "6px",
+                wordBreak: "break-all",
+              }}
+            >
+              {linkPagamento}
+            </div>
+            {qrPagamento ? (
+              <div
+                style={{
+                  fontFamily: sans,
+                  fontSize: "11px",
+                  color: tema.textoSuave,
+                  marginTop: "8px",
+                }}
+              >
+                {t.qr}
+              </div>
+            ) : null}
+          </div>
+          {qrPagamento ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={qrPagamento}
+              alt="QR Code"
+              style={{
+                width: "112px",
+                height: "112px",
+                borderRadius: tema.raio,
+                background: "#ffffff",
+                padding: "8px",
+                border: `1px solid ${tema.hairline}`,
+              }}
+            />
           ) : null}
-          <div
-            style={{
-              fontFamily: serif,
-              fontSize: "30px",
-              fontWeight: 700,
-              color: tema.acentoTextoGrande,
-              lineHeight: 1,
-            }}
-          >
-            {c.fmt(s.valor)}
-          </div>
-          <div
-            style={{
-              fontFamily: sans,
-              fontSize: "9px",
-              letterSpacing: "1px",
-              color: tema.textoSuave,
-              marginTop: "2px",
-            }}
-          >
-            {c.moeda}
-          </div>
         </div>
+      );
+    },
+
+    nota: () =>
+      form.nota ? (
+        <div
+          style={{
+            borderLeft: `2px solid ${tema.secundario}`,
+            paddingLeft: "16px",
+            marginBottom: "36px",
+            fontFamily: sans,
+            fontSize: "12px",
+            color: tema.textoSuave,
+            lineHeight: 1.6,
+          }}
+        >
+          {form.nota}
+        </div>
+      ) : null,
+
+    rodape: () => (
+      <div
+        style={{
+          borderTop: `1px solid ${tema.hairline}`,
+          paddingTop: "16px",
+          textAlign: "center",
+          fontFamily: sans,
+          fontSize: "10px",
+          letterSpacing: "0.5px",
+          color: tema.textoSuave,
+        }}
+      >
+        {[tenant?.nome_empresa, tenant?.email, tenant?.telefone]
+          .filter(Boolean)
+          .join("  ·  ")}
       </div>
-      <div style={{ height: "1px", background: tema.hairline }} />
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px" }}>
-        {s.inclui.map((it, i) => (
-          <span
-            key={i}
-            style={{
-              fontFamily: sans,
-              fontSize: "11px",
-              color: tema.textoSuave,
-              display: "inline-flex",
-              alignItems: "baseline",
-              gap: "6px",
-            }}
-          >
-            <span style={{ color: tema.acentoTexto }}>—</span>
-            {it}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+    ),
+  };
 
   return (
     <div
@@ -169,226 +569,9 @@ export function TemplateAtelierNoir({
         fontFamily: sans,
       }}
     >
-      {/* Cabeçalho editorial: nome do estúdio em serifada gigante como âncora. */}
-      <div style={{ marginBottom: "40px" }}>
-        {kicker(c.tagline)}
-        <div
-          style={{
-            fontFamily: serif,
-            fontSize: "62px",
-            fontWeight: 700,
-            lineHeight: 0.95,
-            letterSpacing: "-1px",
-            marginTop: "14px",
-          }}
-        >
-          {c.estudio.split(" ")[0]}
-          <br />
-          <span style={{ fontStyle: "italic", color: tema.acentoTexto }}>
-            {c.estudio.split(" ").slice(1).join(" ")}
-          </span>
-        </div>
-        <div
-          style={{
-            fontSize: "12px",
-            color: tema.textoSuave,
-            maxWidth: "62%",
-            marginTop: "18px",
-            lineHeight: 1.6,
-            borderLeft: `2px solid ${tema.secundario}`,
-            paddingLeft: "14px",
-          }}
-        >
-          {c.intro}
-        </div>
-      </div>
-
-      {/* Serviços */}
-      <div style={{ marginBottom: "18px" }}>{kicker(c.secoes.servicosTitulo)}</div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "14px",
-          marginBottom: "36px",
-        }}
-      >
-        {[...c.landing, ...c.institucional].map(ServicoCard)}
-      </div>
-
-      {/* Banco de horas + Projetos especiais em duas colunas */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.1fr 0.9fr",
-          gap: "14px",
-          marginBottom: "36px",
-        }}
-      >
-        <div
-          style={{
-            background: tema.superficie,
-            borderRadius: tema.raio,
-            padding: "24px",
-          }}
-        >
-          <div style={{ marginBottom: "4px" }}>
-            {kicker(c.secoes.bancoHorasTitulo)}
-          </div>
-          <div
-            style={{
-              fontSize: "11px",
-              color: tema.textoSuave,
-              marginBottom: "16px",
-            }}
-          >
-            {c.secoes.bancoHorasSub}
-          </div>
-          {c.horas.map((h, i) => (
-            <div
-              key={h.nome}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                padding: "11px 0",
-                borderTop: i === 0 ? "none" : `1px solid ${tema.hairline}`,
-              }}
-            >
-              <div>
-                <div
-                  style={{ fontSize: "13px", color: tema.texto, fontWeight: 500 }}
-                >
-                  {h.nome}
-                </div>
-                <div style={{ fontSize: "10px", color: tema.textoSuave }}>
-                  {h.detalhe}
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <span
-                  style={{
-                    fontFamily: serif,
-                    fontSize: "18px",
-                    fontWeight: 700,
-                    color: tema.acentoTextoGrande,
-                  }}
-                >
-                  {c.fmt(h.valor)}
-                </span>
-                <span
-                  style={{
-                    fontSize: "10px",
-                    color: tema.textoSuave,
-                    marginLeft: "6px",
-                  }}
-                >
-                  {h.unit}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div
-          style={{
-            background: tema.secundario,
-            borderRadius: tema.raio,
-            padding: "24px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: sans,
-              fontSize: "10px",
-              letterSpacing: "3px",
-              textTransform: "uppercase",
-              color: tema.sobreSecundario,
-              fontWeight: 600,
-              opacity: 0.85,
-            }}
-          >
-            {c.secoes.projetosTitulo}
-          </div>
-          <div
-            style={{
-              fontFamily: serif,
-              fontSize: "22px",
-              fontWeight: 700,
-              color: tema.sobreSecundario,
-              margin: "12px 0",
-              lineHeight: 1.15,
-            }}
-          >
-            Sob medida.
-          </div>
-          <div
-            style={{
-              fontSize: "11.5px",
-              color: tema.sobreSecundario,
-              opacity: 0.9,
-              lineHeight: 1.6,
-            }}
-          >
-            {c.secoes.projetosTexto}
-          </div>
-        </div>
-      </div>
-
-      {/* Condições comerciais */}
-      <div style={{ marginBottom: "14px" }}>
-        {kicker(c.secoes.condicoesTitulo)}
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "10px 28px",
-          marginBottom: "40px",
-        }}
-      >
-        {c.secoes.condicoes.map((t, i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              gap: "12px",
-              fontSize: "12px",
-              color: tema.textoSuave,
-              lineHeight: 1.5,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: serif,
-                fontSize: "16px",
-                color: tema.acentoTexto,
-                fontWeight: 700,
-                lineHeight: 1,
-              }}
-            >
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            {t}
-          </div>
-        ))}
-      </div>
-
-      <div
-        style={{
-          borderTop: `1px solid ${tema.hairline}`,
-          paddingTop: "16px",
-          fontSize: "10px",
-          letterSpacing: "0.5px",
-          color: tema.textoSuave,
-          textAlign: "center",
-        }}
-      >
-        {c.rodape}
-      </div>
+      {resolverBlocos("atelier_noir", ocultos).map((id) => (
+        <Fragment key={id}>{blocos[id]?.()}</Fragment>
+      ))}
     </div>
   );
 }
@@ -400,7 +583,7 @@ export function TemplateBlueprintTecnico({
   tema,
   fontes,
   idioma,
-}: TemplatePremiumProps) {
+}: TemplatePremiumDemoProps) {
   const c = conteudoDemo(idioma);
   const grotesk = fontes.spaceGrotesk;
   const mono = fontes.jetbrainsMono;
@@ -764,7 +947,7 @@ export function TemplateSwissStudio({
   tema,
   fontes,
   idioma,
-}: TemplatePremiumProps) {
+}: TemplatePremiumDemoProps) {
   const c = conteudoDemo(idioma);
   const archivo = fontes.archivo;
   const narrow = fontes.archivoNarrow;

@@ -14,6 +14,12 @@ export type BlocoId = string;
 /** Ordem canônica dos blocos de cada template. */
 export const BLOCOS_TEMPLATE: Record<TemplateId, BlocoId[]>;
 
+/**
+ * Blocos ocultos por padrão (default de projeto, não dado do banco). Só os
+ * templates que têm blocos sem fonte de dado aparecem aqui.
+ */
+export const BLOCOS_PADRAO_OCULTOS: Partial<Record<TemplateId, BlocoId[]>>;
+
 export function blocosDoTemplate(templateId: unknown): BlocoId[];
 
 export function normalizarOcultos(

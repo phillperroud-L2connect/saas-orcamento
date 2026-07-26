@@ -524,11 +524,18 @@ test("derivarTema devolve null para template sem paleta", () => {
 // ---------------------------------------------------------------------------
 import {
   BLOCOS_TEMPLATE,
+  BLOCOS_PADRAO_OCULTOS,
   blocosDoTemplate,
   normalizarOcultos,
   estaOculto,
   resolverBlocos,
 } from "./lib/blocos-core.js";
+
+/** Catálogo do template menos os blocos ocultos por padrão. */
+const visivelPadrao = (id) => {
+  const padrao = new Set(BLOCOS_PADRAO_OCULTOS[id] ?? []);
+  return BLOCOS_TEMPLATE[id].filter((b) => !padrao.has(b));
+};
 
 // --- blocosDoTemplate ------------------------------------------------------
 test("blocosDoTemplate devolve a ordem canonica de cada template conhecido", () => {
@@ -599,12 +606,60 @@ test("estaOculto reflete a lista normalizada", () => {
 });
 
 // --- resolverBlocos --------------------------------------------------------
-test("resolverBlocos sem ocultos devolve o documento completo (comportamento atual)", () => {
+test("resolverBlocos sem ocultos devolve o documento padrao (catalogo menos padrao-ocultos)", () => {
   for (const id of Object.keys(BLOCOS_TEMPLATE)) {
-    assert.deepEqual(resolverBlocos(id, null), BLOCOS_TEMPLATE[id]);
-    assert.deepEqual(resolverBlocos(id, []), BLOCOS_TEMPLATE[id]);
-    assert.deepEqual(resolverBlocos(id, undefined), BLOCOS_TEMPLATE[id]);
+    assert.deepEqual(resolverBlocos(id, null), visivelPadrao(id));
+    assert.deepEqual(resolverBlocos(id, []), visivelPadrao(id));
+    assert.deepEqual(resolverBlocos(id, undefined), visivelPadrao(id));
   }
+});
+
+test("os 3 basicos nao tem blocos ocultos por padrao (comportamento atual intacto)", () => {
+  for (const id of ["classico", "moderno", "simples"]) {
+    assert.equal(BLOCOS_PADRAO_OCULTOS[id], undefined);
+    assert.deepEqual(resolverBlocos(id, null), BLOCOS_TEMPLATE[id]);
+  }
+});
+
+// --- ocultos por padrao (Atelier 3a) ---------------------------------------
+test("atelier_noir esconde banco_horas/projetos/condicoes por padrao", () => {
+  const vis = resolverBlocos("atelier_noir", null);
+  assert.ok(!vis.includes("banco_horas"));
+  assert.ok(!vis.includes("projetos"));
+  assert.ok(!vis.includes("condicoes"));
+  // os blocos de orçamento real aparecem, na ordem canonica
+  assert.deepEqual(vis, [
+    "cabecalho",
+    "cliente",
+    "servicos",
+    "total",
+    "pagamento",
+    "pagar_online",
+    "nota",
+    "rodape",
+  ]);
+});
+
+test("atelier_noir: blocos padrao-ocultos seguem no catalogo (para uso futuro)", () => {
+  for (const b of ["banco_horas", "projetos", "condicoes"]) {
+    assert.ok(BLOCOS_TEMPLATE.atelier_noir.includes(b));
+  }
+});
+
+test("resolverBlocos une padrao-ocultos com ocultos do orçamento", () => {
+  // Esconder tambem a nota: sai a nota E os padrao-ocultos.
+  const vis = resolverBlocos("atelier_noir", ["nota"]);
+  assert.ok(!vis.includes("nota"));
+  assert.ok(!vis.includes("banco_horas"));
+  assert.deepEqual(vis, [
+    "cabecalho",
+    "cliente",
+    "servicos",
+    "total",
+    "pagamento",
+    "pagar_online",
+    "rodape",
+  ]);
 });
 
 test("resolverBlocos remove um bloco preservando a ordem canonica", () => {
