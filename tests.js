@@ -518,3 +518,144 @@ test("derivarTema devolve null para template sem paleta", () => {
   assert.equal(derivarTema("classico", null), null);
   assert.equal(derivarTema("moderno", null), null);
 });
+
+// ---------------------------------------------------------------------------
+// Esconder blocos — motor puro da feature Max (lib/blocos-core.js)
+// ---------------------------------------------------------------------------
+import {
+  BLOCOS_TEMPLATE,
+  blocosDoTemplate,
+  normalizarOcultos,
+  estaOculto,
+  resolverBlocos,
+} from "./lib/blocos-core.js";
+
+// --- blocosDoTemplate ------------------------------------------------------
+test("blocosDoTemplate devolve a ordem canonica de cada template conhecido", () => {
+  for (const id of Object.keys(BLOCOS_TEMPLATE)) {
+    assert.deepEqual(blocosDoTemplate(id), BLOCOS_TEMPLATE[id]);
+    assert.ok(blocosDoTemplate(id).length > 0);
+  }
+});
+
+test("blocosDoTemplate cobre os 6 templates existentes", () => {
+  for (const id of [
+    "classico",
+    "moderno",
+    "simples",
+    "atelier_noir",
+    "blueprint_tecnico",
+    "swiss_studio",
+  ]) {
+    assert.ok(blocosDoTemplate(id).length > 0, `${id} deveria ter blocos`);
+  }
+});
+
+test("blocosDoTemplate devolve copia (nao vaza o array interno)", () => {
+  const a = blocosDoTemplate("classico");
+  a.push("lixo");
+  assert.ok(!blocosDoTemplate("classico").includes("lixo"));
+});
+
+test("blocosDoTemplate devolve [] para template desconhecido ou nulo", () => {
+  assert.deepEqual(blocosDoTemplate("inexistente"), []);
+  assert.deepEqual(blocosDoTemplate(null), []);
+  assert.deepEqual(blocosDoTemplate(undefined), []);
+});
+
+// --- normalizarOcultos -----------------------------------------------------
+test("normalizarOcultos mantem apenas ids validos do template", () => {
+  assert.deepEqual(
+    normalizarOcultos("classico", ["nota", "banco_horas", "cliente"]),
+    ["nota", "cliente"], // banco_horas nao existe no classico -> fora
+  );
+});
+
+test("normalizarOcultos deduplica preservando a primeira ocorrencia", () => {
+  assert.deepEqual(normalizarOcultos("moderno", ["nota", "nota", "total"]), [
+    "nota",
+    "total",
+  ]);
+});
+
+test("normalizarOcultos trata entrada malformada como nada oculto", () => {
+  assert.deepEqual(normalizarOcultos("classico", null), []);
+  assert.deepEqual(normalizarOcultos("classico", undefined), []);
+  assert.deepEqual(normalizarOcultos("classico", "nota"), []);
+  assert.deepEqual(normalizarOcultos("classico", { nota: true }), []);
+  assert.deepEqual(normalizarOcultos("classico", [1, true, null, {}]), []);
+});
+
+test("normalizarOcultos devolve [] para template desconhecido", () => {
+  assert.deepEqual(normalizarOcultos("inexistente", ["nota"]), []);
+});
+
+// --- estaOculto ------------------------------------------------------------
+test("estaOculto reflete a lista normalizada", () => {
+  assert.equal(estaOculto("classico", ["nota"], "nota"), true);
+  assert.equal(estaOculto("classico", ["nota"], "cliente"), false);
+  // id valido em outro template, mas nao no classico -> nunca oculto
+  assert.equal(estaOculto("classico", ["banco_horas"], "banco_horas"), false);
+});
+
+// --- resolverBlocos --------------------------------------------------------
+test("resolverBlocos sem ocultos devolve o documento completo (comportamento atual)", () => {
+  for (const id of Object.keys(BLOCOS_TEMPLATE)) {
+    assert.deepEqual(resolverBlocos(id, null), BLOCOS_TEMPLATE[id]);
+    assert.deepEqual(resolverBlocos(id, []), BLOCOS_TEMPLATE[id]);
+    assert.deepEqual(resolverBlocos(id, undefined), BLOCOS_TEMPLATE[id]);
+  }
+});
+
+test("resolverBlocos remove um bloco preservando a ordem canonica", () => {
+  assert.deepEqual(resolverBlocos("classico", ["nota"]), [
+    "cabecalho",
+    "cliente",
+    "servicos",
+    "pagamento",
+    "pagar_online",
+    "rodape",
+  ]);
+});
+
+test("resolverBlocos remove varios blocos de uma vez", () => {
+  assert.deepEqual(resolverBlocos("moderno", ["total", "nota", "pagar_online"]), [
+    "cabecalho",
+    "cliente",
+    "servicos",
+    "pagamento",
+    "rodape",
+  ]);
+});
+
+test("resolverBlocos preserva a ordem independente da ordem da lista de ocultos", () => {
+  // Esconder na ordem inversa nao bagunca a sequencia do documento.
+  assert.deepEqual(
+    resolverBlocos("simples", ["rodape", "cabecalho"]),
+    resolverBlocos("simples", ["cabecalho", "rodape"]),
+  );
+  assert.deepEqual(resolverBlocos("simples", ["rodape", "cabecalho"]), [
+    "cliente",
+    "servicos",
+    "total",
+    "pagamento",
+    "nota",
+    "pagar_online",
+  ]);
+});
+
+test("resolverBlocos ignora id oculto desconhecido", () => {
+  assert.deepEqual(
+    resolverBlocos("classico", ["nao_existe", "nota"]),
+    resolverBlocos("classico", ["nota"]),
+  );
+});
+
+test("resolverBlocos com todos os blocos ocultos devolve [] (escolha do usuario)", () => {
+  assert.deepEqual(resolverBlocos("classico", BLOCOS_TEMPLATE.classico), []);
+});
+
+test("resolverBlocos devolve [] para template desconhecido", () => {
+  assert.deepEqual(resolverBlocos("inexistente", null), []);
+  assert.deepEqual(resolverBlocos(null, ["nota"]), []);
+});
