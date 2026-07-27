@@ -240,7 +240,11 @@ function PainelTemplate({
             fontes={FONTES}
           />
         ) : id === "blueprint_tecnico" ? (
-          <TemplateBlueprintTecnico tema={tema} fontes={FONTES} idioma={idioma} />
+          <TemplateBlueprintTecnico
+            {...exemploOrcamento(idioma)}
+            tema={tema}
+            fontes={FONTES}
+          />
         ) : (
           <TemplateSwissStudio tema={tema} fontes={FONTES} idioma={idioma} />
         )}

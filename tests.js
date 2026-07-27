@@ -646,6 +646,31 @@ test("atelier_noir: blocos padrao-ocultos seguem no catalogo (para uso futuro)",
   }
 });
 
+// --- ocultos por padrao (Blueprint Técnico 3b) -----------------------------
+test("blueprint_tecnico esconde banco_horas/projetos/condicoes por padrao", () => {
+  const vis = resolverBlocos("blueprint_tecnico", null);
+  assert.ok(!vis.includes("banco_horas"));
+  assert.ok(!vis.includes("projetos"));
+  assert.ok(!vis.includes("condicoes"));
+  // mesma sequência de orçamento real do Atelier, na ordem canonica
+  assert.deepEqual(vis, [
+    "cabecalho",
+    "cliente",
+    "servicos",
+    "total",
+    "pagamento",
+    "pagar_online",
+    "nota",
+    "rodape",
+  ]);
+});
+
+test("blueprint_tecnico: blocos padrao-ocultos seguem no catalogo (para uso futuro)", () => {
+  for (const b of ["banco_horas", "projetos", "condicoes"]) {
+    assert.ok(BLOCOS_TEMPLATE.blueprint_tecnico.includes(b));
+  }
+});
+
 test("resolverBlocos une padrao-ocultos com ocultos do orçamento", () => {
   // Esconder tambem a nota: sai a nota E os padrao-ocultos.
   const vis = resolverBlocos("atelier_noir", ["nota"]);

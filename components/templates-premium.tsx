@@ -577,14 +577,31 @@ export function TemplateAtelierNoir({
 }
 
 /* ===========================================================================
- * B) BLUEPRINT TÉCNICO — spec sheet
+ * B) BLUEPRINT TÉCNICO — spec sheet (orçamento real, 3b)
+ * --------------------------------------------------------------------------
+ * Recebe os MESMOS dados dos 3 básicos (form/total/plano/tenant/…), mais o
+ * `tema` derivado e as `fontes`. Renderiza por blocoId via resolverBlocos, na
+ * pele de spec técnica do Blueprint (navy + malha pontilhada, Space Grotesk +
+ * JetBrains Mono, ciano nos rótulos e âmbar como cor do dinheiro, cantos retos,
+ * marcas "+" de coordenada). banco_horas/projetos/condicoes ficam ocultos por
+ * padrão (BLOCOS_PADRAO_OCULTOS) — sem fonte de dado no formulário.
  * ======================================================================== */
 export function TemplateBlueprintTecnico({
+  form,
+  total,
+  plano,
+  tenant,
+  numero,
+  dataHoje,
+  dict,
+  fmt,
+  linkPagamento,
+  qrPagamento,
+  ocultos,
   tema,
   fontes,
-  idioma,
-}: TemplatePremiumDemoProps) {
-  const c = conteudoDemo(idioma);
+}: TemplatePremiumProps) {
+  const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
   const grotesk = fontes.spaceGrotesk;
   const mono = fontes.jetbrainsMono;
   const grade = tema.grade ?? tema.hairline;
@@ -622,110 +639,38 @@ export function TemplateBlueprintTecnico({
     </span>
   );
 
-  const SpecRow = (s: ItemServico, destaque = false) => (
-    <div
-      key={s.ordem}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "44px 1fr 130px",
-        alignItems: "center",
-        gap: "16px",
-        padding: "16px 18px",
-        background: tema.superficie,
-        border: `1px solid ${destaque ? tema.acento : tema.hairline}`,
-        borderLeft: `3px solid ${destaque ? tema.acento : tema.secundario}`,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: mono,
-          fontSize: "13px",
-          color: tema.textoSuave,
-        }}
-      >
-        {s.ordem}
-      </div>
-      <div>
-        <div
-          style={{
-            fontFamily: grotesk,
-            fontSize: "16px",
-            fontWeight: 700,
-            color: tema.texto,
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          {s.nome}
-          {s.tag ? (
-            <span
-              style={{
-                fontFamily: mono,
-                fontSize: "8px",
-                letterSpacing: "1px",
-                color: tema.sobreAcento,
-                background: tema.acento,
-                padding: "2px 6px",
-              }}
-            >
-              {s.tag}
-            </span>
-          ) : null}
-        </div>
-        <div
-          style={{
-            fontFamily: mono,
-            fontSize: "10.5px",
-            color: tema.textoSuave,
-            marginTop: "5px",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "4px 10px",
-          }}
-        >
-          {s.inclui.map((it, i) => (
-            <span key={i}>[{it}]</span>
-          ))}
-        </div>
-      </div>
-      <div style={{ textAlign: "right" }}>
-        <span
-          style={{
-            fontFamily: mono,
-            fontSize: "22px",
-            fontWeight: 700,
-            color: tema.texto,
-          }}
-        >
-          {c.fmt(s.valor)}
-        </span>
-        <div
-          style={{
-            fontFamily: mono,
-            fontSize: "9px",
-            color: tema.textoSuave,
-            letterSpacing: "1px",
-          }}
-        >
-          {c.moeda}
-        </div>
-      </div>
-    </div>
+  const tPagar = PAGAR_LABELS[idioma] ?? PAGAR_LABELS.pt;
+
+  // Numeração dinâmica das seções: só recebem número os blocos que realmente
+  // vão renderar conteúdo (pagar_online/nota podem estar ausentes), para não
+  // abrir buracos como "01, 02, 04". O rótulo "NN / TÍTULO" é a assinatura do
+  // Blueprint; a numeração acompanha a ordem canônica visível.
+  const renderavel: Record<string, boolean> = {
+    cliente: true,
+    servicos: true,
+    pagamento: true,
+    pagar_online: !!linkPagamento,
+    nota: !!form.nota,
+  };
+  const numeroSecao = new Map(
+    resolverBlocos("blueprint_tecnico", ocultos)
+      .filter((id) => renderavel[id])
+      .map((id, i) => [id, String(i + 1).padStart(2, "0")]),
+  );
+  const secLabel = (id: string, texto: string) =>
+    label(`${numeroSecao.get(id) ?? "00"} / ${texto}`);
+
+  const marcas = (
+    <>
+      <Marca top="-7px" left="-7px" />
+      <Marca top="-7px" right="-7px" />
+      <Marca bottom="-7px" left="-7px" />
+      <Marca bottom="-7px" right="-7px" />
+    </>
   );
 
-  return (
-    <div
-      style={{
-        background: tema.fundo,
-        backgroundImage: fundoGrade,
-        backgroundSize: "22px 22px",
-        color: tema.texto,
-        padding: "44px 40px",
-        fontFamily: grotesk,
-      }}
-    >
-      {/* Cabeçalho com moldura técnica e marcas "+" nos cantos */}
+  const blocos: Record<string, () => ReactNode> = {
+    cabecalho: () => (
       <div
         style={{
           position: "relative",
@@ -735,19 +680,19 @@ export function TemplateBlueprintTecnico({
           background: tema.superficie,
         }}
       >
-        <Marca top="-7px" left="-7px" />
-        <Marca top="-7px" right="-7px" />
-        <Marca bottom="-7px" left="-7px" />
-        <Marca bottom="-7px" right="-7px" />
+        {marcas}
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
+            gap: "24px",
           }}
         >
           <div>
-            {label("// " + c.tagline)}
+            {tenant?.nome_profissional
+              ? label("// " + tenant.nome_profissional)
+              : null}
             <div
               style={{
                 fontFamily: grotesk,
@@ -759,169 +704,439 @@ export function TemplateBlueprintTecnico({
                 lineHeight: 1,
               }}
             >
-              {c.estudio}
+              {tenant?.nome_empresa || "Sua Empresa"}
               <span style={{ color: tema.acentoTexto }}>.</span>
             </div>
           </div>
-          <div style={{ textAlign: "right", paddingTop: "4px" }}>
-            <div style={{ marginBottom: "4px" }}>{label("REF")}</div>
-            <div style={{ fontFamily: mono, fontSize: "13px", color: tema.texto }}>
-              STD-EXE-2026
-            </div>
+          <div
+            style={{
+              textAlign: "right",
+              whiteSpace: "nowrap",
+              paddingTop: "4px",
+            }}
+          >
+            {(
+              [
+                [dict.pdf.numero, numero],
+                [dict.pdf.data, dataHoje],
+                [dict.pdf.validade, dict.pdf.validadeVal],
+              ] as const
+            ).map(([rotulo, valor]) => (
+              <div key={rotulo} style={{ marginBottom: "8px" }}>
+                <div
+                  style={{
+                    fontFamily: mono,
+                    fontSize: "9px",
+                    letterSpacing: "2px",
+                    textTransform: "uppercase",
+                    color: tema.acentoTexto,
+                  }}
+                >
+                  {rotulo}
+                </div>
+                <div
+                  style={{
+                    fontFamily: mono,
+                    fontSize: "13px",
+                    color: tema.texto,
+                    marginTop: "2px",
+                  }}
+                >
+                  {valor}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    ),
+
+    cliente: () => (
+      <div style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          {secLabel("cliente", dict.pdf.cliente)}
+        </div>
+        <div
+          style={{
+            background: tema.superficie,
+            border: `1px solid ${tema.hairline}`,
+            borderLeft: `3px solid ${tema.secundario}`,
+            padding: "16px 18px",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: grotesk,
+              fontSize: "20px",
+              fontWeight: 700,
+              color: tema.texto,
+            }}
+          >
+            {form.cliente_nome || dict.pdf.nomeCliente}
+          </div>
+          {form.cliente_email || form.cliente_telefone ? (
             <div
               style={{
                 fontFamily: mono,
-                fontSize: "13px",
-                color: tema.secundarioTexto,
-                marginTop: "4px",
+                fontSize: "10.5px",
+                color: tema.textoSuave,
+                marginTop: "6px",
               }}
             >
-              {c.moeda} · USD
+              {[form.cliente_email, form.cliente_telefone]
+                .filter(Boolean)
+                .join("  ·  ")}
             </div>
-          </div>
+          ) : null}
         </div>
+      </div>
+    ),
+
+    servicos: () => (
+      <div style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          {secLabel("servicos", dict.pdf.servicos)}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {form.servicos
+            .filter((s) => s.descricao || s.valor)
+            .map((s, i) => (
+              <div
+                key={s.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "44px 1fr 130px",
+                  alignItems: "center",
+                  gap: "16px",
+                  padding: "16px 18px",
+                  background: tema.superficie,
+                  border: `1px solid ${tema.hairline}`,
+                  borderLeft: `3px solid ${tema.secundario}`,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: mono,
+                    fontSize: "13px",
+                    color: tema.textoSuave,
+                  }}
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </div>
+                <div
+                  style={{
+                    fontFamily: grotesk,
+                    fontSize: "16px",
+                    fontWeight: 700,
+                    color: tema.texto,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {s.descricao || dict.orc.servicoN(i + 1)}
+                </div>
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontFamily: mono,
+                    fontSize: "22px",
+                    fontWeight: 700,
+                    color: tema.texto,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {fmt(parseFloat(s.valor) || 0)}
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    ),
+
+    total: () => (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          borderTop: `1px solid ${tema.divisor}`,
+          paddingTop: "18px",
+          marginBottom: "32px",
+        }}
+      >
         <div
           style={{
             fontFamily: mono,
             fontSize: "11px",
-            color: tema.textoSuave,
-            marginTop: "16px",
-            lineHeight: 1.6,
-            maxWidth: "80%",
+            letterSpacing: "3px",
+            textTransform: "uppercase",
+            color: tema.acentoTexto,
           }}
         >
-          {c.intro}
+          {dict.pdf.total}
+        </div>
+        <div
+          style={{
+            fontFamily: mono,
+            fontSize: "40px",
+            fontWeight: 700,
+            color: tema.secundarioTexto,
+            lineHeight: 1,
+          }}
+        >
+          {fmt(total)}
         </div>
       </div>
+    ),
 
-      {/* Serviços — spec rows */}
-      <div style={{ marginBottom: "12px" }}>{label("01 / " + c.secoes.servicosTitulo)}</div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-          marginBottom: "32px",
-        }}
-      >
-        {SpecRow(c.landing[0])}
-        {SpecRow(c.landing[1], true)}
-        {SpecRow(c.institucional[0])}
-        {SpecRow(c.institucional[1], true)}
-      </div>
+    pagamento: () => (
+      <div style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          {secLabel("pagamento", dict.pdf.pagamento)}
+        </div>
 
-      {/* Banco de horas — âmbar nos preços */}
-      <div style={{ marginBottom: "12px" }}>
-        {label("02 / " + c.secoes.bancoHorasTitulo)}
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: "8px",
-          marginBottom: "32px",
-        }}
-      >
-        {c.horas.map((h) => (
+        {plano.tipo === "unico" && (
           <div
-            key={h.nome}
             style={{
-              background: tema.superficie,
-              border: `1px solid ${tema.hairline}`,
-              borderTop: `2px solid ${tema.secundario}`,
-              padding: "18px 16px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              fontFamily: mono,
+              padding: "6px 0",
             }}
           >
-            <div
+            <span style={{ fontSize: "14px", color: tema.texto }}>
+              {dict.pdf.pagamentoAVista}
+            </span>
+            <span
               style={{
-                fontFamily: mono,
-                fontSize: "10px",
-                letterSpacing: "1px",
-                textTransform: "uppercase",
-                color: tema.textoSuave,
-              }}
-            >
-              {h.nome}
-            </div>
-            <div
-              style={{
-                fontFamily: mono,
-                fontSize: "26px",
+                fontSize: "28px",
                 fontWeight: 700,
                 color: tema.secundarioTexto,
-                margin: "8px 0 2px",
               }}
             >
-              {c.fmt(h.valor)}
-            </div>
-            <div style={{ fontFamily: mono, fontSize: "10px", color: tema.textoSuave }}>
-              {h.unit} · {h.detalhe}
-            </div>
+              {fmt(total)}
+            </span>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Projetos especiais + condições em duas colunas */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "8px",
-        }}
-      >
-        <div
-          style={{
-            border: `1px solid ${tema.acento}`,
-            padding: "22px 20px",
-            background: tema.superficie,
-          }}
-        >
-          <div style={{ marginBottom: "10px" }}>
-            {label("03 / " + c.secoes.projetosTitulo)}
-          </div>
-          <div
-            style={{
-              fontFamily: mono,
-              fontSize: "11.5px",
-              color: tema.textoSuave,
-              lineHeight: 1.7,
-            }}
-          >
-            {c.secoes.projetosTexto}
-          </div>
-        </div>
-        <div
-          style={{
-            border: `1px solid ${tema.hairline}`,
-            padding: "22px 20px",
-            background: tema.superficie,
-          }}
-        >
-          <div style={{ marginBottom: "12px" }}>
-            {label("04 / " + c.secoes.condicoesTitulo)}
-          </div>
-          {c.secoes.condicoes.map((t, i) => (
+        {plano.tipo === "entrada_restante" && (
+          <>
             <div
-              key={i}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "8px",
+              }}
+            >
+              {(
+                [
+                  [dict.pdf.entradaPct(plano.pct), plano.entrada],
+                  [
+                    dict.pdf.restantePct(Number((100 - plano.pct).toFixed(0))),
+                    plano.restante,
+                  ],
+                ] as const
+              ).map(([rotulo, valor]) => (
+                <div
+                  key={rotulo}
+                  style={{
+                    background: tema.superficie,
+                    border: `1px solid ${tema.hairline}`,
+                    borderTop: `2px solid ${tema.secundario}`,
+                    padding: "18px 16px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: mono,
+                      fontSize: "10px",
+                      letterSpacing: "1px",
+                      textTransform: "uppercase",
+                      color: tema.textoSuave,
+                    }}
+                  >
+                    {rotulo}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: mono,
+                      fontSize: "26px",
+                      fontWeight: 700,
+                      color: tema.secundarioTexto,
+                      marginTop: "8px",
+                    }}
+                  >
+                    {fmt(valor)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
               style={{
                 fontFamily: mono,
                 fontSize: "11px",
                 color: tema.textoSuave,
-                display: "flex",
-                gap: "10px",
-                padding: "5px 0",
-                lineHeight: 1.5,
+                marginTop: "10px",
               }}
             >
-              <span style={{ color: tema.acentoTexto }}>
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              {t}
+              {dict.pdf.doisPagamentosNota}
             </div>
-          ))}
-        </div>
-      </div>
+          </>
+        )}
 
+        {plano.tipo === "parcelado" && (
+          <>
+            <div
+              style={{
+                fontFamily: mono,
+                fontSize: "12px",
+                color: tema.textoSuave,
+                marginBottom: "10px",
+              }}
+            >
+              {plano.subtipo === "entrada_diferenciada"
+                ? dict.pdf.parceladoEntradaDif(plano.n)
+                : dict.pdf.parceladoIguais(plano.n)}
+            </div>
+            <div>
+              {plano.parcelas.map((p, i) => (
+                <div
+                  key={p.numero}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    padding: "11px 0",
+                    borderTop: i === 0 ? "none" : `1px solid ${tema.hairline}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: mono,
+                      fontSize: "13px",
+                      color: tema.textoSuave,
+                    }}
+                  >
+                    {p.entrada
+                      ? dict.pdf.entradaPrimeira
+                      : dict.pdf.parcelaN(p.numero)}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: mono,
+                      fontSize: "18px",
+                      fontWeight: 700,
+                      color: tema.secundarioTexto,
+                    }}
+                  >
+                    {fmt(p.valor)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    ),
+
+    pagar_online: () => {
+      if (!linkPagamento) return null;
+      return (
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ marginBottom: "12px" }}>
+            {secLabel("pagar_online", tPagar.titulo)}
+          </div>
+          <div
+            style={{
+              position: "relative",
+              border: `1px solid ${tema.hairline}`,
+              background: tema.superficie,
+              padding: "22px 24px",
+              display: "flex",
+              alignItems: "center",
+              gap: "24px",
+            }}
+          >
+            {marcas}
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  fontFamily: mono,
+                  fontSize: "12px",
+                  color: tema.texto,
+                  lineHeight: 1.5,
+                }}
+              >
+                {tPagar.clique}
+              </div>
+              <div
+                style={{
+                  fontFamily: mono,
+                  fontSize: "12px",
+                  color: tema.acentoTexto,
+                  marginTop: "6px",
+                  wordBreak: "break-all",
+                }}
+              >
+                {linkPagamento}
+              </div>
+              {qrPagamento ? (
+                <div
+                  style={{
+                    fontFamily: mono,
+                    fontSize: "11px",
+                    color: tema.textoSuave,
+                    marginTop: "8px",
+                  }}
+                >
+                  {tPagar.qr}
+                </div>
+              ) : null}
+            </div>
+            {qrPagamento ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={qrPagamento}
+                alt="QR Code"
+                style={{
+                  width: "112px",
+                  height: "112px",
+                  background: "#ffffff",
+                  padding: "8px",
+                  border: `1px solid ${tema.hairline}`,
+                }}
+              />
+            ) : null}
+          </div>
+        </div>
+      );
+    },
+
+    nota: () =>
+      form.nota ? (
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ marginBottom: "12px" }}>
+            {secLabel(
+              "nota",
+              idioma === "es" ? "Observaciones" : "Observações",
+            )}
+          </div>
+          <div
+            style={{
+              borderLeft: `3px solid ${tema.secundario}`,
+              paddingLeft: "16px",
+              fontFamily: mono,
+              fontSize: "11px",
+              color: tema.textoSuave,
+              lineHeight: 1.6,
+            }}
+          >
+            {form.nota}
+          </div>
+        </div>
+      ) : null,
+
+    rodape: () => (
       <div
         style={{
           fontFamily: mono,
@@ -934,8 +1149,27 @@ export function TemplateBlueprintTecnico({
           borderTop: `1px solid ${tema.hairline}`,
         }}
       >
-        {c.rodape}
+        {[tenant?.nome_empresa, tenant?.email, tenant?.telefone]
+          .filter(Boolean)
+          .join("  ·  ")}
       </div>
+    ),
+  };
+
+  return (
+    <div
+      style={{
+        background: tema.fundo,
+        backgroundImage: fundoGrade,
+        backgroundSize: "22px 22px",
+        color: tema.texto,
+        padding: "44px 40px",
+        fontFamily: grotesk,
+      }}
+    >
+      {resolverBlocos("blueprint_tecnico", ocultos).map((id) => (
+        <Fragment key={id}>{blocos[id]?.()}</Fragment>
+      ))}
     </div>
   );
 }
