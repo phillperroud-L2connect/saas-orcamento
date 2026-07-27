@@ -12,10 +12,10 @@ import type { PlanoContratado } from "./types";
 /** Os três templates originais, livres para qualquer plano. */
 export type TemplateLivre = "classico" | "moderno" | "simples";
 
-/** Os três templates premium do segmento web designer (exclusivos do Max). */
-export type TemplateMax = "atelier_noir" | "blueprint_tecnico" | "swiss_studio";
+/** Os três templates premium do segmento web designer (exclusivos do Pro). */
+export type TemplatePro = "atelier_noir" | "blueprint_tecnico" | "swiss_studio";
 
-export type TemplateId = TemplateLivre | TemplateMax;
+export type TemplateId = TemplateLivre | TemplatePro;
 
 export type Rgb = { r: number; g: number; b: number };
 export type Hsl = { h: number; s: number; l: number };
@@ -46,17 +46,17 @@ export function garantirContraste(
 export type TemplateInfo = {
   id: TemplateId;
   /** Plano exigido, ou `null` quando o template é livre. */
-  planoExigido: "max" | null;
+  planoExigido: "pro" | null;
   premium: boolean;
 };
 
 export const TEMPLATES: Record<TemplateId, TemplateInfo>;
 export const TEMPLATES_ORDEM: TemplateId[];
-export const TEMPLATES_MAX: TemplateMax[];
+export const TEMPLATES_PRO: TemplatePro[];
 export const TEMPLATE_PADRAO: TemplateLivre;
 
 export function isTemplateId(valor: unknown): valor is TemplateId;
-export function planoDoTemplate(templateId: unknown): "max" | null;
+export function planoDoTemplate(templateId: unknown): "pro" | null;
 export function podeUsarTemplate(
   plano: PlanoContratado | null | undefined,
   templateId: unknown,
@@ -91,11 +91,11 @@ export type Paleta = PaletaAtelier | PaletaBlueprint | PaletaSwiss;
  * dentro dele só um token.
  */
 export type PaletaOverrides = Partial<
-  Record<TemplateMax, Record<string, string>>
+  Record<TemplatePro, Record<string, string>>
 >;
 
-export const PALETAS_PADRAO: Record<TemplateMax, Paleta>;
-export const PALETA_TOKENS: Record<TemplateMax, string[]>;
+export const PALETAS_PADRAO: Record<TemplatePro, Paleta>;
+export const PALETA_TOKENS: Record<TemplatePro, string[]>;
 
 export function paletaEfetiva(
   templateId: unknown,

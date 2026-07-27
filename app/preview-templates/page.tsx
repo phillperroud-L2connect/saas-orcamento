@@ -33,7 +33,7 @@ import type { TemplateProps } from "@/components/orcamento-templates";
 import type { FormState, PlanoPagamento } from "@/components/orcamentos-manager";
 import type { Tenant } from "@/lib/types";
 
-type TemplateMax = keyof typeof TEMPLATES_PREMIUM;
+type TemplatePremium = keyof typeof TEMPLATES_PREMIUM;
 
 /**
  * Orçamento de exemplo para os templates premium JÁ convertidos (Atelier, 3a).
@@ -102,7 +102,7 @@ function exemploOrcamento(idioma: "pt" | "es"): TemplateProps {
   };
 }
 
-const META: Record<TemplateMax, { nome: string; nota: string }> = {
+const META: Record<TemplatePremium, { nome: string; nota: string }> = {
   atelier_noir: {
     nome: "Atelier Noir",
     nota: "Editorial de luxo · Playfair Display + DM Sans",
@@ -129,13 +129,13 @@ const TOKEN_LABEL: Record<string, string> = {
   vermelho: "Vermelho",
 };
 
-const ORDEM: TemplateMax[] = ["atelier_noir", "blueprint_tecnico", "swiss_studio"];
+const ORDEM: TemplatePremium[] = ["atelier_noir", "blueprint_tecnico", "swiss_studio"];
 
 function PainelTemplate({
   id,
   idioma,
 }: {
-  id: TemplateMax;
+  id: TemplatePremium;
   idioma: "pt" | "es";
 }) {
   const [cores, setCores] = useState<Record<string, string>>(() => ({

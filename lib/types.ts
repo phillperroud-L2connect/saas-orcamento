@@ -21,12 +21,11 @@ export type MoedaPreferida = "BRL" | "ARS" | "USD";
 /**
  * Plano contratado pelo tenant ("manual" = pagamento fora do Mercado Pago).
  *
- * "max" é o plano superior do segmento web designer — libera os três templates
- * premium (ver lib/templates-core.js). É atribuído pelo admin; ainda NÃO tem
- * preço nem entrada no catálogo de checkout (lib/planos.ts) — a precificação e
- * a página de vendas são um passo posterior.
+ * "pro" é o plano superior do catálogo de checkout (lib/planos.ts) e o único que
+ * libera os três templates premium do segmento web designer (ver
+ * lib/templates-core.js). "basico" e "manual" ficam sem acesso ao premium.
  */
-export type PlanoContratado = "basico" | "pro" | "max" | "manual";
+export type PlanoContratado = "basico" | "pro" | "manual";
 /** Status de pagamento da assinatura (badge colorido no admin). */
 export type StatusAssinatura = "pago" | "pendente" | "inadimplente";
 /** Como o cliente paga a assinatura. */

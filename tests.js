@@ -325,7 +325,7 @@ import {
   resolverTemplate,
   paletaEfetiva,
   derivarTema,
-  TEMPLATES_MAX,
+  TEMPLATES_PRO,
   TEMPLATE_PADRAO,
 } from "./lib/templates-core.js";
 
@@ -417,24 +417,24 @@ test("isTemplateId reconhece livres e premium, rejeita desconhecido", () => {
   assert.equal(isTemplateId(null), false);
 });
 
-test("planoDoTemplate: livres nao exigem plano, premium exigem max", () => {
+test("planoDoTemplate: livres nao exigem plano, premium exigem pro", () => {
   assert.equal(planoDoTemplate("classico"), null);
   assert.equal(planoDoTemplate("moderno"), null);
-  assert.equal(planoDoTemplate("atelier_noir"), "max");
-  assert.equal(planoDoTemplate("blueprint_tecnico"), "max");
-  assert.equal(planoDoTemplate("swiss_studio"), "max");
+  assert.equal(planoDoTemplate("atelier_noir"), "pro");
+  assert.equal(planoDoTemplate("blueprint_tecnico"), "pro");
+  assert.equal(planoDoTemplate("swiss_studio"), "pro");
 });
 
 test("podeUsarTemplate: todos veem os livres", () => {
-  for (const plano of ["basico", "pro", "max", "manual", null, undefined]) {
+  for (const plano of ["basico", "pro", "manual", null, undefined]) {
     assert.equal(podeUsarTemplate(plano, "classico"), true);
   }
 });
 
-test("podeUsarTemplate: so o plano max libera os premium", () => {
-  for (const id of TEMPLATES_MAX) {
-    assert.equal(podeUsarTemplate("max", id), true);
-    assert.equal(podeUsarTemplate("pro", id), false);
+test("podeUsarTemplate: so o plano pro libera os premium", () => {
+  for (const id of TEMPLATES_PRO) {
+    assert.equal(podeUsarTemplate("pro", id), true);
+    // "manual" (status de pagamento) NAO herda o premium — trata como basico.
     assert.equal(podeUsarTemplate("basico", id), false);
     assert.equal(podeUsarTemplate("manual", id), false);
     assert.equal(podeUsarTemplate(null, id), false);
@@ -442,23 +442,25 @@ test("podeUsarTemplate: so o plano max libera os premium", () => {
 });
 
 test("podeUsarTemplate nega template desconhecido para qualquer plano", () => {
-  assert.equal(podeUsarTemplate("max", "inexistente"), false);
+  assert.equal(podeUsarTemplate("pro", "inexistente"), false);
 });
 
-test("templatesDisponiveis: nao-max ve 3, max ve 6", () => {
-  assert.equal(templatesDisponiveis("pro").length, 3);
-  assert.equal(templatesDisponiveis("max").length, 6);
+test("templatesDisponiveis: nao-pro ve 3, pro ve 6", () => {
+  assert.equal(templatesDisponiveis("pro").length, 6);
+  assert.equal(templatesDisponiveis("basico").length, 3);
+  assert.equal(templatesDisponiveis("manual").length, 3);
   assert.equal(templatesDisponiveis(null).length, 3);
 });
 
-test("resolverTemplate: max mantem o premium; nao-max cai no padrao", () => {
-  assert.equal(resolverTemplate("max", "atelier_noir"), "atelier_noir");
-  assert.equal(resolverTemplate("pro", "atelier_noir"), TEMPLATE_PADRAO);
+test("resolverTemplate: pro mantem o premium; nao-pro cai no padrao", () => {
+  assert.equal(resolverTemplate("pro", "atelier_noir"), "atelier_noir");
+  assert.equal(resolverTemplate("basico", "atelier_noir"), TEMPLATE_PADRAO);
+  assert.equal(resolverTemplate("manual", "atelier_noir"), TEMPLATE_PADRAO);
   assert.equal(resolverTemplate(null, "swiss_studio"), TEMPLATE_PADRAO);
   // Downgrade nao vaza layout pago:
   assert.equal(resolverTemplate("basico", "blueprint_tecnico"), "classico");
   // Id invalido nunca renderiza:
-  assert.equal(resolverTemplate("max", "lixo"), TEMPLATE_PADRAO);
+  assert.equal(resolverTemplate("pro", "lixo"), TEMPLATE_PADRAO);
 });
 
 // --- paletas ---------------------------------------------------------------
@@ -489,7 +491,7 @@ test("derivarTema produz superficies de referencia a partir dos fundos", () => {
 });
 
 test("derivarTema: texto e acento sempre passam o piso de contraste", () => {
-  for (const id of TEMPLATES_MAX) {
+  for (const id of TEMPLATES_PRO) {
     const t = derivarTema(id, null);
     assert.ok(
       contraste(t.texto, t.superficie) >= 7,

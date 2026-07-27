@@ -349,7 +349,6 @@ export function TenantRow({ tenant, pagamentos }: Props) {
                   >
                     <option value="basico">Básico</option>
                     <option value="pro">Pro</option>
-                    <option value="max">Max</option>
                     <option value="manual">Manual</option>
                   </select>
                 </div>
