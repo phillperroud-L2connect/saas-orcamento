@@ -113,6 +113,9 @@ const pt = {
     premiumUpgrade: "Exclusivo do Plano Max",
     premiumNota:
       "Modelos do segmento web designer, com paleta de cores editável. Preenchidos pelo editor de blocos (em breve).",
+    blocosTitulo: "Mostrar/esconder blocos",
+    blocosNota:
+      "Desmarque os blocos que não quer neste orçamento. Recursos sem dados no formulário ficam indisponíveis.",
     verPrevia: "Ver prévia",
     ocultarPrevia: "Ocultar prévia",
     salvar: "Salvar",
@@ -441,6 +444,9 @@ const es: Dict = {
     premiumUpgrade: "Exclusivo del Plan Max",
     premiumNota:
       "Modelos del segmento diseño web, con paleta de colores editable. Se completan con el editor de bloques (próximamente).",
+    blocosTitulo: "Mostrar/ocultar bloques",
+    blocosNota:
+      "Desmarcá los bloques que no querés en este presupuesto. Los recursos sin datos en el formulario quedan no disponibles.",
     verPrevia: "Ver vista previa",
     ocultarPrevia: "Ocultar vista previa",
     salvar: "Guardar",

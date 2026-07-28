@@ -37,3 +37,5 @@ export function resolverBlocos(
   templateId: unknown,
   ocultos: unknown,
 ): BlocoId[];
+
+export function podeEsconderBlocos(plano: unknown): boolean;

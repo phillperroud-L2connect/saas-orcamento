@@ -23,9 +23,21 @@ import {
   TemplateClassico,
   TemplateModerno,
   TemplateSimples,
-  type TipoTemplate,
 } from "./orcamento-templates";
-import { podeUsarTemplate } from "@/lib/templates-core";
+import {
+  TemplateAtelierNoir,
+  TemplateBlueprintTecnico,
+  TemplateSwissStudio,
+} from "./templates-premium";
+import BlocosToggles from "./blocos-toggles";
+import {
+  podeUsarTemplate,
+  resolverTemplate,
+  derivarTema,
+  type TemplateId,
+} from "@/lib/templates-core";
+import { podeEsconderBlocos, normalizarOcultos } from "@/lib/blocos-core";
+import { FONTES } from "@/lib/fontes-templates";
 
 type ServicoItem = {
   id: string;
@@ -54,7 +66,10 @@ export type FormState = {
   entrada_tipo: TipoEntrada; // Opção 3 — entrada diferenciada
   entrada_valor: string; // Opção 3 — valor ou % da entrada diferenciada
   // ── Apresentação ──
-  template: TipoTemplate; // modelo visual do PDF
+  template: TemplateId; // modelo visual do PDF (6 templates: 3 livres + 3 pro)
+  // Blocos (seções) que o tenant Pro escolheu esconder neste orçamento.
+  // Só ids COM dado (nunca os padrão-ocultos); [] = documento completo.
+  blocos_ocultos: string[];
 };
 
 /** Campos de pagamento reutilizáveis guardados em um modelo. */
@@ -93,6 +108,7 @@ const emptyForm: FormState = {
   entrada_tipo: "percentual",
   entrada_valor: "30",
   template: "classico",
+  blocos_ocultos: [],
 };
 
 /** Plano de pagamento calculado a partir do total e das escolhas do formulário. */
@@ -125,6 +141,7 @@ type OrcamentoRow = {
   opcao_pagamento: string | null;
   parcelas: number | null;
   percentual_entrada: number | null;
+  blocos_ocultos: unknown; // jsonb do banco — normalizado ao reconstruir o form
 };
 
 /** Reconstrói o formulário a partir de um orçamento salvo (reabrir p/ edição). */
@@ -137,6 +154,7 @@ function formFromOrcamento(o: OrcamentoRow, cliente: Cliente | null): FormState 
     }),
   );
 
+  const template = (o.template as TemplateId) ?? "classico";
   const base: FormState = {
     ...emptyForm,
     cliente_id: o.cliente_id ?? "",
@@ -146,7 +164,9 @@ function formFromOrcamento(o: OrcamentoRow, cliente: Cliente | null): FormState 
     cliente_documento: cliente?.documento ?? "",
     cliente_endereco: cliente?.endereco ?? "",
     servicos: servicos.length ? servicos : emptyForm.servicos,
-    template: (o.template as TipoTemplate) ?? "classico",
+    template,
+    // Normaliza contra o template salvo: ids inválidos/de outro template caem.
+    blocos_ocultos: normalizarOcultos(template, o.blocos_ocultos),
   };
 
   const pct = Number(o.percentual_entrada ?? 0);
@@ -268,7 +288,7 @@ const labelCls = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-
 export function OrcamentosManager() {
   const supabase = createClient();
   const previewRef = useRef<HTMLDivElement>(null);
-  const { dict, fmt, simbolo, moeda, data: fmtDataLocal } = useI18n();
+  const { dict, idioma, fmt, simbolo, moeda, data: fmtDataLocal } = useI18n();
   const searchParams = useSearchParams();
   const editId = searchParams.get("id");
   const wantPdf = searchParams.get("pdf") === "1";
@@ -616,6 +636,25 @@ export function OrcamentosManager() {
   const cor = tenant?.cor_primaria || "#0F0F0F";
   const corSuave = `${cor}14`; // ~8% de opacidade (hex alpha)
 
+  // ── Plano Pro: templates premium + esconder blocos ──
+  // Downgrade seguro: tenant que perdeu o pro nunca renderiza/salva premium.
+  // resolverTemplate rebaixa para o template livre padrão (classico) quando o
+  // plano não libera o template selecionado.
+  const templateEfetivo = resolverTemplate(tenant?.plano, form.template);
+  const ehPremium =
+    templateEfetivo === "atelier_noir" ||
+    templateEfetivo === "blueprint_tecnico" ||
+    templateEfetivo === "swiss_studio";
+  // Tema derivado dos overrides de cor do tenant (ou paletas padrão) — só premium.
+  const temaPremium = ehPremium
+    ? derivarTema(templateEfetivo, tenant?.paleta_templates ?? null)
+    : null;
+  // A feature de esconder blocos é exclusiva do pro; para os demais, doc completo.
+  const podeToggles = podeEsconderBlocos(tenant?.plano);
+  const ocultosEfetivos = podeToggles
+    ? normalizarOcultos(templateEfetivo, form.blocos_ocultos)
+    : [];
+
   /**
    * Salva ou atualiza o cliente do orçamento na tabela "clientes".
    * Deduplica por tenant_id + e-mail (ou por nome, quando não há e-mail),
@@ -724,10 +763,16 @@ export function OrcamentosManager() {
       desconto: 0,
       total,
       moeda,
-      template: form.template,
+      // Grava o template EFETIVO (downgrade-safe): um tenant sem pro nunca
+      // persiste um template premium a que não tem mais acesso.
+      template: templateEfetivo,
       opcao_pagamento: form.opcao_pagamento,
       parcelas: plano.tipo === "parcelado" ? plano.n : 1,
       percentual_entrada: percentualEntrada,
+      // Só o pro persiste ocultos; vazio → null (= documento completo). Normaliza
+      // contra o template efetivo para nunca gravar id de outro template.
+      blocos_ocultos:
+        podeToggles && ocultosEfetivos.length > 0 ? ocultosEfetivos : null,
     };
 
     // ── Edição: atualiza o registro existente (mantém numero e status) ──
@@ -872,6 +917,7 @@ export function OrcamentosManager() {
     fmt,
     linkPagamento,
     qrPagamento,
+    ocultos: ocultosEfetivos,
   };
 
   return (
@@ -1457,10 +1503,9 @@ export function OrcamentosManager() {
               })}
             </div>
 
-            {/* Templates premium (Plano Max) — gating por plano. Renderizam
-                conteúdo de demonstração e são preenchidos pelo editor de blocos
-                (etapa posterior); aqui ficam registrados e travados conforme o
-                plano do tenant. */}
+            {/* Templates premium (Plano Pro) — gating por plano. Para o tenant
+                pro são SELECIONÁVEIS como qualquer template; para os demais ficam
+                travados (cadeado + CTA de upgrade) e só dá para ver a prévia. */}
             <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800">
               <div className="mb-2 flex items-center gap-1.5">
                 <Sparkles className="size-3.5 text-amber-500" />
@@ -1468,7 +1513,7 @@ export function OrcamentosManager() {
                   {dict.orc.premiumTitulo}
                 </h4>
                 <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
-                  Max
+                  Pro
                 </span>
               </div>
               <div className="grid gap-2 sm:grid-cols-3">
@@ -1492,32 +1537,46 @@ export function OrcamentosManager() {
                   ] as const
                 ).map((opt) => {
                   const liberado = podeUsarTemplate(tenant?.plano, opt.v);
+                  const ativo = liberado && form.template === opt.v;
                   return (
                     <div
                       key={opt.v}
-                      className={`relative rounded-lg border p-3 ${
-                        liberado
+                      className={`relative rounded-lg border p-3 transition ${
+                        ativo
+                          ? "border-gray-900 bg-amber-50/60 ring-1 ring-gray-900 dark:border-amber-400 dark:bg-amber-500/10 dark:ring-amber-400"
+                          : liberado
                           ? "border-amber-300 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-500/5"
                           : "border-gray-200 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-900/40"
                       }`}
                     >
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`text-sm font-semibold ${
-                            liberado
-                              ? "text-gray-900 dark:text-gray-100"
-                              : "text-gray-500 dark:text-gray-400"
-                          }`}
+                      {/* Área selecionável (só quando liberado). Fica separada do
+                          link "Ver modelo" para não aninhar <a> dentro de <button>. */}
+                      {liberado ? (
+                        <button
+                          type="button"
+                          onClick={() => updateForm("template", opt.v)}
+                          className="block w-full text-left"
                         >
-                          {opt.titulo}
-                        </span>
-                        {liberado ? null : (
-                          <Lock className="size-3 text-gray-400" />
-                        )}
-                      </div>
-                      <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                        {opt.desc}
-                      </div>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {opt.titulo}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                            {opt.desc}
+                          </span>
+                        </button>
+                      ) : (
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                              {opt.titulo}
+                            </span>
+                            <Lock className="size-3 text-gray-400" />
+                          </div>
+                          <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                            {opt.desc}
+                          </div>
+                        </div>
+                      )}
                       <a
                         href="/preview-templates"
                         target="_blank"
@@ -1535,6 +1594,25 @@ export function OrcamentosManager() {
                 {dict.orc.premiumNota}
               </p>
             </div>
+
+            {/* Esconder blocos — exclusivo do Plano Pro. Segue o template
+                selecionado (inclusive premium); some por completo para não-pro. */}
+            {podeToggles && (
+              <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800">
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+                  {dict.orc.blocosTitulo}
+                </h4>
+                <BlocosToggles
+                  templateId={templateEfetivo}
+                  idioma={idioma}
+                  value={form.blocos_ocultos}
+                  onChange={(next) => updateForm("blocos_ocultos", next)}
+                />
+                <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+                  {dict.orc.blocosNota}
+                </p>
+              </div>
+            )}
           </section>
 
           {erro && (
@@ -1596,9 +1674,32 @@ export function OrcamentosManager() {
                 minHeight: "297mm",
               }}
             >
-              {form.template === "moderno" ? (
+              {/* Render pelo template EFETIVO (downgrade-safe). Premium recebe o
+                  tema derivado + as fontes self-hosted (necessárias para o PDF
+                  via html2canvas bater com a prévia). */}
+              {ehPremium && temaPremium ? (
+                templateEfetivo === "atelier_noir" ? (
+                  <TemplateAtelierNoir
+                    {...templateProps}
+                    tema={temaPremium}
+                    fontes={FONTES}
+                  />
+                ) : templateEfetivo === "blueprint_tecnico" ? (
+                  <TemplateBlueprintTecnico
+                    {...templateProps}
+                    tema={temaPremium}
+                    fontes={FONTES}
+                  />
+                ) : (
+                  <TemplateSwissStudio
+                    {...templateProps}
+                    tema={temaPremium}
+                    fontes={FONTES}
+                  />
+                )
+              ) : templateEfetivo === "moderno" ? (
                 <TemplateModerno {...templateProps} />
-              ) : form.template === "simples" ? (
+              ) : templateEfetivo === "simples" ? (
                 <TemplateSimples {...templateProps} />
               ) : (
                 <TemplateClassico {...templateProps} />

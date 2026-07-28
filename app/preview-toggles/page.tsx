@@ -21,12 +21,8 @@
  * combinado (enquanto não se salva, o toggle é efêmero).
  */
 import { useMemo, useState } from "react";
-import {
-  BLOCOS_PADRAO_OCULTOS,
-  blocosDoTemplate,
-  normalizarOcultos,
-} from "@/lib/blocos-core";
-import { rotuloBloco } from "@/lib/blocos-rotulos";
+import { normalizarOcultos } from "@/lib/blocos-core";
+import BlocosToggles from "@/components/blocos-toggles";
 import { derivarTema, type TemplateId } from "@/lib/templates-core";
 import { FONTES } from "@/lib/fontes-templates";
 import {
@@ -61,12 +57,6 @@ const TEMPLATES: { id: TemplateId; nome: string }[] = [
   { id: "blueprint_tecnico", nome: "Blueprint Técnico" },
   { id: "swiss_studio", nome: "Swiss Studio" },
 ];
-
-/** Sufixo "sem dados" ao lado dos blocos padrão-ocultos, por idioma. */
-const SEM_DADOS: Record<Idioma, string> = {
-  pt: "sem dados neste formulário",
-  es: "sin datos en este formulario",
-};
 
 /**
  * Orçamento de exemplo — mesmo conteúdo fictício do /preview-templates, para que
@@ -171,35 +161,20 @@ export default function PreviewTogglesPage() {
   const [idioma, setIdioma] = useState<Idioma>("pt");
   // Blocos que o usuário escolheu esconder (só os que TÊM dado; os padrão-
   // ocultos nunca entram aqui — ficam desabilitados na UI).
-  const [ocultosUsuario, setOcultosUsuario] = useState<Set<string>>(new Set());
-
-  const catalogo = blocosDoTemplate(templateId);
-  const padraoOcultos = useMemo(
-    () => new Set(BLOCOS_PADRAO_OCULTOS[templateId] ?? []),
-    [templateId],
-  );
+  const [ocultosUsuario, setOcultosUsuario] = useState<string[]>([]);
 
   // O que alimenta `blocos_ocultos`: escolha do tenant, normalizada (a forma
   // canônica de persistir na Etapa 5). Padrão-ocultos NÃO entram — são default
   // de projeto, não escolha do usuário.
   const blocosOcultos = useMemo(
-    () => normalizarOcultos(templateId, Array.from(ocultosUsuario)),
+    () => normalizarOcultos(templateId, ocultosUsuario),
     [templateId, ocultosUsuario],
   );
 
   function trocarTemplate(id: TemplateId) {
     setTemplateId(id);
     // Ids de bloco mudam entre templates — zera a escolha do usuário.
-    setOcultosUsuario(new Set());
-  }
-
-  function toggleBloco(id: string) {
-    setOcultosUsuario((prev) => {
-      const proximo = new Set(prev);
-      if (proximo.has(id)) proximo.delete(id);
-      else proximo.add(id);
-      return proximo;
-    });
+    setOcultosUsuario([]);
   }
 
   return (
@@ -293,65 +268,17 @@ export default function PreviewTogglesPage() {
 
           <div>
             <div style={rotuloSecao}>Blocos do documento</div>
-            <ul
-              style={{
-                listStyle: "none",
-                margin: 0,
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: "2px",
-              }}
-            >
-              {catalogo.map((id) => {
-                const desabilitado = padraoOcultos.has(id);
-                const marcado = !desabilitado && !ocultosUsuario.has(id);
-                return (
-                  <li key={id}>
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        padding: "8px 10px",
-                        borderRadius: "8px",
-                        cursor: desabilitado ? "not-allowed" : "pointer",
-                        opacity: desabilitado ? 0.45 : 1,
-                        background: marcado ? "rgba(255,255,255,0.04)" : "transparent",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={marcado}
-                        disabled={desabilitado}
-                        onChange={() => toggleBloco(id)}
-                        style={{
-                          width: "16px",
-                          height: "16px",
-                          accentColor: "#6ee7b7",
-                          cursor: desabilitado ? "not-allowed" : "pointer",
-                        }}
-                      />
-                      <span style={{ fontSize: "14px", color: "#e8e8e8" }}>
-                        {rotuloBloco(id, idioma)}
-                      </span>
-                      {desabilitado && (
-                        <span
-                          style={{
-                            marginLeft: "auto",
-                            fontSize: "11px",
-                            color: "#8a8a8a",
-                            fontStyle: "italic",
-                          }}
-                        >
-                          {SEM_DADOS[idioma]}
-                        </span>
-                      )}
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
+            {/* Mesmo componente compartilhado que o fluxo real (orcamentos-
+                manager) usa. `dark` força o tema escuro do Tailwind nesta rota
+                standalone (que não vive sob a classe .dark do app). */}
+            <div className="dark">
+              <BlocosToggles
+                templateId={templateId}
+                idioma={idioma}
+                value={ocultosUsuario}
+                onChange={setOcultosUsuario}
+              />
+            </div>
           </div>
 
           <div>

@@ -531,6 +531,7 @@ import {
   normalizarOcultos,
   estaOculto,
   resolverBlocos,
+  podeEsconderBlocos,
 } from "./lib/blocos-core.js";
 
 /** Catálogo do template menos os blocos ocultos por padrão. */
@@ -771,6 +772,21 @@ test("resolverBlocos com todos os blocos ocultos devolve [] (escolha do usuario)
 test("resolverBlocos devolve [] para template desconhecido", () => {
   assert.deepEqual(resolverBlocos("inexistente", null), []);
   assert.deepEqual(resolverBlocos(null, ["nota"]), []);
+});
+
+// --- podeEsconderBlocos (gating do Plano Pro) ------------------------------
+test("podeEsconderBlocos libera SÓ o plano pro", () => {
+  assert.equal(podeEsconderBlocos("pro"), true);
+});
+
+test("podeEsconderBlocos nega basico, manual, nulo e desconhecido", () => {
+  assert.equal(podeEsconderBlocos("basico"), false);
+  assert.equal(podeEsconderBlocos("manual"), false);
+  assert.equal(podeEsconderBlocos(null), false);
+  assert.equal(podeEsconderBlocos(undefined), false);
+  assert.equal(podeEsconderBlocos(""), false);
+  assert.equal(podeEsconderBlocos("PRO"), false); // case-sensitive, como o gate de template
+  assert.equal(podeEsconderBlocos("max"), false); // plano extinto nunca reabilita
 });
 
 // ---------------------------------------------------------------------------
