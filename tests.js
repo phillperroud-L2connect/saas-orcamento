@@ -673,6 +673,37 @@ test("blueprint_tecnico: blocos padrao-ocultos seguem no catalogo (para uso futu
   }
 });
 
+// --- ocultos por padrao (Swiss Studio 3c) ----------------------------------
+test("swiss_studio esconde banco_horas/projetos/condicoes por padrao", () => {
+  const vis = resolverBlocos("swiss_studio", null);
+  assert.ok(!vis.includes("banco_horas"));
+  assert.ok(!vis.includes("projetos"));
+  assert.ok(!vis.includes("condicoes"));
+  // mesma sequência de orçamento real do Atelier/Blueprint, na ordem canonica
+  assert.deepEqual(vis, [
+    "cabecalho",
+    "cliente",
+    "servicos",
+    "total",
+    "pagamento",
+    "pagar_online",
+    "nota",
+    "rodape",
+  ]);
+});
+
+test("swiss_studio: blocos padrao-ocultos seguem no catalogo (para uso futuro)", () => {
+  for (const b of ["banco_horas", "projetos", "condicoes"]) {
+    assert.ok(BLOCOS_TEMPLATE.swiss_studio.includes(b));
+  }
+});
+
+test("os 3 premium compartilham a mesma sequência de orçamento real visivel", () => {
+  const esperado = resolverBlocos("atelier_noir", null);
+  assert.deepEqual(resolverBlocos("blueprint_tecnico", null), esperado);
+  assert.deepEqual(resolverBlocos("swiss_studio", null), esperado);
+});
+
 test("resolverBlocos une padrao-ocultos com ocultos do orçamento", () => {
   // Esconder tambem a nota: sai a nota E os padrao-ocultos.
   const vis = resolverBlocos("atelier_noir", ["nota"]);

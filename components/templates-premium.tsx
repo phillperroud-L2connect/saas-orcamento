@@ -13,7 +13,9 @@
  * (lib/fontes-templates.ts), servidas do próprio domínio para o html2canvas
  * capturá-las.
  *
- * O conteúdo é 100% fictício (Studio Exemplo) — ver templates-premium-conteudo.
+ * Os três já são orçamento real por blocos (3a/3b/3c): recebem os mesmos dados
+ * dos básicos e pintam via resolverBlocos. Na rota de preview os dados são um
+ * exemplo fictício; em produção vêm do formulário do orçamento.
  */
 import { Fragment } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -21,7 +23,6 @@ import type { TemaTemplate } from "@/lib/templates-core";
 import type { FONTES } from "@/lib/fontes-templates";
 import { resolverBlocos } from "@/lib/blocos-core";
 import type { TemplateProps } from "./orcamento-templates";
-import { conteudoDemo, type ItemServico } from "./templates-premium-conteudo";
 
 type Fontes = typeof FONTES;
 
@@ -33,16 +34,6 @@ type Fontes = typeof FONTES;
 export type TemplatePremiumProps = TemplateProps & {
   tema: TemaTemplate;
   fontes: Fontes;
-};
-
-/**
- * Props do modo DEMO (conteúdo fictício "Studio Exemplo"), ainda usado por
- * Blueprint e Swiss até serem convertidos. Some quando 3b/3c terminarem.
- */
-export type TemplatePremiumDemoProps = {
-  tema: TemaTemplate;
-  fontes: Fontes;
-  idioma?: string;
 };
 
 /** Rótulos do box "Pagar online" (inline pt/es) — espelha os 3 básicos. */
@@ -1175,41 +1166,79 @@ export function TemplateBlueprintTecnico({
 }
 
 /* ===========================================================================
- * C) SWISS STUDIO — cartaz tipográfico suíço
+ * C) SWISS STUDIO — cartaz tipográfico suíço (orçamento real, 3c)
+ * --------------------------------------------------------------------------
+ * Recebe os MESMOS dados dos 3 básicos (form/total/plano/tenant/…), mais o
+ * `tema` derivado e as `fontes`. Renderiza por blocoId via resolverBlocos, na
+ * pele de cartaz suíço (fundo claro, Archivo 900, um único vermelho, hairlines
+ * grossas, zero cantos arredondados, coluna de numeração de seção em outline).
+ * A numeração é DINÂMICA (só os blocos que pintam conteúdo recebem número, para
+ * não abrir buracos como "01, 02, 04"). banco_horas/projetos/condicoes ficam
+ * ocultos por padrão (BLOCOS_PADRAO_OCULTOS) — sem fonte de dado no formulário.
  * ======================================================================== */
 export function TemplateSwissStudio({
+  form,
+  total,
+  plano,
+  tenant,
+  numero,
+  dataHoje,
+  dict,
+  fmt,
+  linkPagamento,
+  qrPagamento,
+  ocultos,
   tema,
   fontes,
-  idioma,
-}: TemplatePremiumDemoProps) {
-  const c = conteudoDemo(idioma);
+}: TemplatePremiumProps) {
+  const idioma = (tenant?.idioma as "pt" | "es") ?? "pt";
   const archivo = fontes.archivo;
   const narrow = fontes.archivoNarrow;
+  const tPagar = PAGAR_LABELS[idioma] ?? PAGAR_LABELS.pt;
 
-  // Coluna fixa de numeração de seção: número grande em outline à esquerda.
-  const secao = (num: string, titulo: string, children: ReactNode) => (
+  // Numeração dinâmica das seções: só recebem número os blocos que realmente
+  // vão renderar conteúdo (pagar_online/nota podem estar ausentes). O número
+  // gigante em outline à esquerda é a assinatura do Swiss; ele acompanha a
+  // ordem canônica visível. cabecalho e rodape ficam fora da numeração (moldura).
+  const renderavel: Record<string, boolean> = {
+    cliente: true,
+    servicos: true,
+    total: true,
+    pagamento: true,
+    pagar_online: !!linkPagamento,
+    nota: !!form.nota,
+  };
+  const numeroSecao = new Map(
+    resolverBlocos("swiss_studio", ocultos)
+      .filter((id) => renderavel[id])
+      .map((id, i) => [id, String(i + 1).padStart(2, "0")]),
+  );
+
+  // Coluna de numeração de seção: número grande em outline à esquerda, título
+  // estreito em caixa-alta embaixo, hairline grossa no topo.
+  const secao = (id: string, titulo: string, children: ReactNode) => (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "96px 1fr",
-        gap: "18px",
+        gridTemplateColumns: "104px 1fr",
+        gap: "22px",
         borderTop: `2px solid ${tema.hairline}`,
-        paddingTop: "18px",
-        marginBottom: "34px",
+        paddingTop: "20px",
+        marginBottom: "36px",
       }}
     >
       <div>
         <div
           style={{
             fontFamily: archivo,
-            fontSize: "68px",
+            fontSize: "72px",
             fontWeight: 900,
-            lineHeight: 0.8,
+            lineHeight: 0.78,
             color: "transparent",
             WebkitTextStroke: `1.5px ${tema.outline ?? tema.divisor}`,
           }}
         >
-          {num}
+          {numeroSecao.get(id) ?? "00"}
         </div>
         <div
           style={{
@@ -1217,10 +1246,9 @@ export function TemplateSwissStudio({
             fontSize: "12px",
             fontWeight: 700,
             textTransform: "uppercase",
-            letterSpacing: "1px",
+            letterSpacing: "1.5px",
             color: tema.texto,
-            marginTop: "10px",
-            writingMode: "horizontal-tb",
+            marginTop: "12px",
           }}
         >
           {titulo}
@@ -1230,283 +1258,490 @@ export function TemplateSwissStudio({
     </div>
   );
 
-  const PrecoServico = (s: ItemServico, ultimo = false) => (
-    <div
-      key={s.ordem}
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        padding: "16px 0",
-        borderBottom: ultimo ? "none" : `2px solid ${tema.divisor}`,
-      }}
-    >
-      <div style={{ maxWidth: "62%" }}>
-        <div
-          style={{
-            fontFamily: archivo,
-            fontSize: "20px",
-            fontWeight: 900,
-            textTransform: "uppercase",
-            letterSpacing: "-0.5px",
-            color: tema.texto,
-            lineHeight: 1,
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          {s.nome}
-          {s.tag ? (
-            <span
-              style={{
-                fontFamily: narrow,
-                fontSize: "10px",
-                fontWeight: 700,
-                letterSpacing: "1px",
-                color: tema.sobreAcento,
-                background: tema.acento,
-                padding: "2px 7px",
-              }}
-            >
-              {s.tag}
-            </span>
-          ) : null}
-        </div>
-        <div
-          style={{
-            fontFamily: narrow,
-            fontSize: "13px",
-            color: tema.textoSuave,
-            marginTop: "6px",
-            lineHeight: 1.4,
-          }}
-        >
-          {s.descricao}
-        </div>
-        <div
-          style={{
-            fontFamily: narrow,
-            fontSize: "12px",
-            color: tema.textoSuave,
-            marginTop: "6px",
-          }}
-        >
-          {s.inclui.join(" / ")}
-        </div>
-      </div>
+  const blocos: Record<string, () => ReactNode> = {
+    // Cabeçalho: nome em Archivo 900 gigante + ponto vermelho, régua vermelha,
+    // metadados reais (número/data/validade) à direita. Fora da numeração.
+    cabecalho: () => (
       <div
         style={{
-          fontFamily: archivo,
-          fontSize: "46px",
-          fontWeight: 900,
-          letterSpacing: "-2px",
-          lineHeight: 0.85,
-          color: tema.acentoTextoGrande,
-          whiteSpace: "nowrap",
+          borderBottom: `3px solid ${tema.acento}`,
+          paddingBottom: "22px",
+          marginBottom: "38px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          gap: "32px",
         }}
       >
-        {c.fmt(s.valor)}
+        <div>
+          {tenant?.nome_profissional ? (
+            <div
+              style={{
+                fontFamily: narrow,
+                fontSize: "12px",
+                fontWeight: 700,
+                letterSpacing: "3px",
+                textTransform: "uppercase",
+                color: tema.acentoTexto,
+              }}
+            >
+              {tenant.nome_profissional}
+            </div>
+          ) : null}
+          <div
+            style={{
+              fontFamily: archivo,
+              fontSize: "68px",
+              fontWeight: 900,
+              textTransform: "uppercase",
+              letterSpacing: "-3px",
+              lineHeight: 0.82,
+              color: tema.texto,
+              marginTop: "12px",
+            }}
+          >
+            {tenant?.nome_empresa || "Sua Empresa"}
+            <span style={{ color: tema.acento }}>.</span>
+          </div>
+        </div>
+        <div style={{ textAlign: "right", whiteSpace: "nowrap", paddingBottom: "4px" }}>
+          {(
+            [
+              [dict.pdf.numero, numero],
+              [dict.pdf.data, dataHoje],
+              [dict.pdf.validade, dict.pdf.validadeVal],
+            ] as const
+          ).map(([rotulo, valor]) => (
+            <div key={rotulo} style={{ marginBottom: "9px" }}>
+              <div
+                style={{
+                  fontFamily: narrow,
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  letterSpacing: "2px",
+                  textTransform: "uppercase",
+                  color: tema.acentoTexto,
+                }}
+              >
+                {rotulo}
+              </div>
+              <div
+                style={{
+                  fontFamily: archivo,
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  color: tema.texto,
+                  marginTop: "1px",
+                }}
+              >
+                {valor}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    ),
+
+    cliente: () =>
+      secao(
+        "cliente",
+        dict.pdf.cliente,
+        <div>
+          <div
+            style={{
+              fontFamily: archivo,
+              fontSize: "30px",
+              fontWeight: 900,
+              textTransform: "uppercase",
+              letterSpacing: "-1px",
+              lineHeight: 0.95,
+              color: tema.texto,
+            }}
+          >
+            {form.cliente_nome || dict.pdf.nomeCliente}
+          </div>
+          {form.cliente_email || form.cliente_telefone ? (
+            <div
+              style={{
+                fontFamily: narrow,
+                fontSize: "13px",
+                color: tema.textoSuave,
+                marginTop: "8px",
+              }}
+            >
+              {[form.cliente_email, form.cliente_telefone]
+                .filter(Boolean)
+                .join("  ·  ")}
+            </div>
+          ) : null}
+        </div>,
+      ),
+
+    servicos: () => {
+      const itens = form.servicos.filter((s) => s.descricao || s.valor);
+      return secao(
+        "servicos",
+        dict.pdf.servicos,
+        <div>
+          {itens.map((s, i) => (
+            <div
+              key={s.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-end",
+                gap: "16px",
+                padding: "18px 0",
+                borderBottom:
+                  i === itens.length - 1 ? "none" : `2px solid ${tema.divisor}`,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: archivo,
+                  fontSize: "21px",
+                  fontWeight: 900,
+                  textTransform: "uppercase",
+                  letterSpacing: "-0.5px",
+                  color: tema.texto,
+                  lineHeight: 1.05,
+                  maxWidth: "64%",
+                }}
+              >
+                {s.descricao || dict.orc.servicoN(i + 1)}
+              </div>
+              <div
+                style={{
+                  fontFamily: archivo,
+                  fontSize: "44px",
+                  fontWeight: 900,
+                  letterSpacing: "-2px",
+                  lineHeight: 0.85,
+                  color: tema.acentoTextoGrande,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {fmt(parseFloat(s.valor) || 0)}
+              </div>
+            </div>
+          ))}
+        </div>,
+      );
+    },
+
+    total: () =>
+      secao(
+        "total",
+        dict.pdf.total,
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: "24px",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: narrow,
+              fontSize: "13px",
+              fontWeight: 700,
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+              color: tema.acentoTexto,
+            }}
+          >
+            {dict.pdf.total}
+          </div>
+          <div
+            style={{
+              fontFamily: archivo,
+              fontSize: "60px",
+              fontWeight: 900,
+              letterSpacing: "-3px",
+              lineHeight: 0.8,
+              color: tema.texto,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {fmt(total)}
+          </div>
+        </div>,
+      ),
+
+    pagamento: () =>
+      secao(
+        "pagamento",
+        dict.pdf.pagamento,
+        <div>
+          {plano.tipo === "unico" && (
+            <div
+              style={{
+                fontFamily: archivo,
+                fontSize: "24px",
+                fontWeight: 900,
+                textTransform: "uppercase",
+                letterSpacing: "-0.5px",
+                color: tema.texto,
+              }}
+            >
+              {dict.pdf.pagamentoAVista} —{" "}
+              <span style={{ color: tema.acentoTextoGrande }}>{fmt(total)}</span>
+            </div>
+          )}
+
+          {plano.tipo === "entrada_restante" && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+                {(
+                  [
+                    [dict.pdf.entradaPct(plano.pct), plano.entrada, false],
+                    [
+                      dict.pdf.restantePct(Number((100 - plano.pct).toFixed(0))),
+                      plano.restante,
+                      true,
+                    ],
+                  ] as const
+                ).map(([rotulo, valor, comBorda]) => (
+                  <div
+                    key={rotulo}
+                    style={{
+                      paddingLeft: comBorda ? "22px" : "0",
+                      paddingRight: "22px",
+                      borderLeft: comBorda ? `2px solid ${tema.divisor}` : "none",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: narrow,
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                        color: tema.textoSuave,
+                      }}
+                    >
+                      {rotulo}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: archivo,
+                        fontSize: "38px",
+                        fontWeight: 900,
+                        letterSpacing: "-1.5px",
+                        lineHeight: 0.9,
+                        color: tema.acentoTextoGrande,
+                        marginTop: "8px",
+                      }}
+                    >
+                      {fmt(valor)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div
+                style={{
+                  fontFamily: narrow,
+                  fontSize: "12px",
+                  color: tema.textoSuave,
+                  marginTop: "12px",
+                }}
+              >
+                {dict.pdf.doisPagamentosNota}
+              </div>
+            </>
+          )}
+
+          {plano.tipo === "parcelado" && (
+            <>
+              <div
+                style={{
+                  fontFamily: narrow,
+                  fontSize: "13px",
+                  color: tema.textoSuave,
+                  marginBottom: "6px",
+                }}
+              >
+                {plano.subtipo === "entrada_diferenciada"
+                  ? dict.pdf.parceladoEntradaDif(plano.n)
+                  : dict.pdf.parceladoIguais(plano.n)}
+              </div>
+              <div>
+                {plano.parcelas.map((p, i) => (
+                  <div
+                    key={p.numero}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      padding: "13px 0",
+                      borderTop: i === 0 ? "none" : `2px solid ${tema.divisor}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: narrow,
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                        color: tema.textoSuave,
+                      }}
+                    >
+                      {p.entrada
+                        ? dict.pdf.entradaPrimeira
+                        : dict.pdf.parcelaN(p.numero)}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: archivo,
+                        fontSize: "26px",
+                        fontWeight: 900,
+                        letterSpacing: "-1px",
+                        color: tema.acentoTextoGrande,
+                      }}
+                    >
+                      {fmt(p.valor)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>,
+      ),
+
+    pagar_online: () => {
+      if (!linkPagamento) return null;
+      return secao(
+        "pagar_online",
+        tPagar.titulo,
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "28px",
+            border: `2px solid ${tema.hairline}`,
+            padding: "24px 26px",
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div
+              style={{
+                fontFamily: archivo,
+                fontSize: "22px",
+                fontWeight: 900,
+                textTransform: "uppercase",
+                letterSpacing: "-0.5px",
+                color: tema.texto,
+              }}
+            >
+              {tPagar.titulo}
+            </div>
+            <div
+              style={{
+                fontFamily: narrow,
+                fontSize: "14px",
+                color: tema.texto,
+                marginTop: "10px",
+              }}
+            >
+              {tPagar.clique}
+            </div>
+            <div
+              style={{
+                fontFamily: narrow,
+                fontSize: "13px",
+                fontWeight: 600,
+                color: tema.acentoTexto,
+                marginTop: "6px",
+                wordBreak: "break-all",
+              }}
+            >
+              {linkPagamento}
+            </div>
+            {qrPagamento ? (
+              <div
+                style={{
+                  fontFamily: narrow,
+                  fontSize: "12px",
+                  color: tema.textoSuave,
+                  marginTop: "8px",
+                }}
+              >
+                {tPagar.qr}
+              </div>
+            ) : null}
+          </div>
+          {qrPagamento ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={qrPagamento}
+              alt="QR Code"
+              style={{
+                width: "120px",
+                height: "120px",
+                background: "#ffffff",
+                padding: "8px",
+                border: `2px solid ${tema.hairline}`,
+                flex: "none",
+              }}
+            />
+          ) : null}
+        </div>,
+      );
+    },
+
+    nota: () =>
+      form.nota
+        ? secao(
+            "nota",
+            dict.orc.observacoes,
+            <div
+              style={{
+                fontFamily: narrow,
+                fontSize: "14px",
+                color: tema.textoSuave,
+                lineHeight: 1.6,
+              }}
+            >
+              {form.nota}
+            </div>,
+          )
+        : null,
+
+    rodape: () => (
+      <div
+        style={{
+          fontFamily: narrow,
+          fontSize: "11px",
+          fontWeight: 600,
+          letterSpacing: "1px",
+          textTransform: "uppercase",
+          color: tema.textoSuave,
+          borderTop: `2px solid ${tema.hairline}`,
+          paddingTop: "16px",
+        }}
+      >
+        {[tenant?.nome_empresa, tenant?.email, tenant?.telefone]
+          .filter(Boolean)
+          .join("  ·  ")}
+      </div>
+    ),
+  };
 
   return (
     <div
       style={{
         background: tema.fundo,
         color: tema.texto,
-        padding: "44px 42px",
+        padding: "48px 44px",
         fontFamily: narrow,
       }}
     >
-      {/* Cabeçalho: nome em Archivo 900 gigante, régua vermelha */}
-      <div
-        style={{
-          borderBottom: `3px solid ${tema.acento}`,
-          paddingBottom: "20px",
-          marginBottom: "34px",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: narrow,
-            fontSize: "12px",
-            fontWeight: 700,
-            letterSpacing: "3px",
-            textTransform: "uppercase",
-            color: tema.acentoTexto,
-          }}
-        >
-          {c.tagline} — {c.moeda}
-        </div>
-        <div
-          style={{
-            fontFamily: archivo,
-            fontSize: "72px",
-            fontWeight: 900,
-            textTransform: "uppercase",
-            letterSpacing: "-3px",
-            lineHeight: 0.82,
-            color: tema.texto,
-            marginTop: "12px",
-          }}
-        >
-          Studio
-          <br />
-          Exemplo
-          <span style={{ color: tema.acento }}>.</span>
-        </div>
-        <div
-          style={{
-            fontFamily: narrow,
-            fontSize: "13px",
-            color: tema.textoSuave,
-            marginTop: "16px",
-            maxWidth: "70%",
-            lineHeight: 1.5,
-          }}
-        >
-          {c.intro}
-        </div>
-      </div>
-
-      {secao(
-        "01",
-        c.secoes.servicosTitulo,
-        <div>
-          {PrecoServico(c.landing[0])}
-          {PrecoServico(c.landing[1])}
-          {PrecoServico(c.institucional[0])}
-          {PrecoServico(c.institucional[1], true)}
-        </div>,
-      )}
-
-      {secao(
-        "02",
-        c.secoes.bancoHorasTitulo,
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0" }}>
-          {c.horas.map((h, i) => (
-            <div
-              key={h.nome}
-              style={{
-                borderLeft: i === 0 ? "none" : `2px solid ${tema.divisor}`,
-                paddingLeft: i === 0 ? "0" : "16px",
-                paddingRight: "12px",
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: narrow,
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                  color: tema.textoSuave,
-                }}
-              >
-                {h.nome}
-              </div>
-              <div
-                style={{
-                  fontFamily: archivo,
-                  fontSize: "38px",
-                  fontWeight: 900,
-                  letterSpacing: "-1.5px",
-                  color: tema.texto,
-                  lineHeight: 0.9,
-                  margin: "8px 0 4px",
-                }}
-              >
-                {c.fmt(h.valor)}
-              </div>
-              <div style={{ fontFamily: narrow, fontSize: "12px", color: tema.acentoTexto }}>
-                {h.unit} · {h.detalhe}
-              </div>
-            </div>
-          ))}
-        </div>,
-      )}
-
-      {secao(
-        "03",
-        c.secoes.projetosTitulo,
-        <div
-          style={{
-            fontFamily: archivo,
-            fontSize: "26px",
-            fontWeight: 900,
-            textTransform: "uppercase",
-            letterSpacing: "-1px",
-            lineHeight: 0.95,
-            color: tema.texto,
-          }}
-        >
-          <span style={{ color: tema.acento }}>→ </span>
-          <span
-            style={{
-              fontFamily: narrow,
-              fontSize: "14px",
-              fontWeight: 400,
-              textTransform: "none",
-              letterSpacing: "0",
-              color: tema.textoSuave,
-              lineHeight: 1.5,
-              display: "block",
-              marginTop: "10px",
-            }}
-          >
-            {c.secoes.projetosTexto}
-          </span>
-        </div>,
-      )}
-
-      {secao(
-        "04",
-        c.secoes.condicoesTitulo,
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px" }}>
-          {c.secoes.condicoes.map((t, i) => (
-            <div
-              key={i}
-              style={{
-                fontFamily: narrow,
-                fontSize: "13px",
-                color: tema.texto,
-                display: "flex",
-                gap: "10px",
-                lineHeight: 1.4,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: archivo,
-                  fontSize: "16px",
-                  fontWeight: 900,
-                  color: tema.acento,
-                  lineHeight: 1,
-                }}
-              >
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              {t}
-            </div>
-          ))}
-        </div>,
-      )}
-
-      <div
-        style={{
-          fontFamily: narrow,
-          fontSize: "11px",
-          letterSpacing: "0.5px",
-          textTransform: "uppercase",
-          color: tema.textoSuave,
-          borderTop: `2px solid ${tema.hairline}`,
-          paddingTop: "14px",
-        }}
-      >
-        {c.rodape}
-      </div>
+      {resolverBlocos("swiss_studio", ocultos).map((id) => (
+        <Fragment key={id}>{blocos[id]?.()}</Fragment>
+      ))}
     </div>
   );
 }

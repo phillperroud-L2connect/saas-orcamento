@@ -36,7 +36,8 @@ import type { Tenant } from "@/lib/types";
 type TemplatePremium = keyof typeof TEMPLATES_PREMIUM;
 
 /**
- * Orçamento de exemplo para os templates premium JÁ convertidos (Atelier, 3a).
+ * Orçamento de exemplo para os templates premium (todos convertidos: Atelier 3a,
+ * Blueprint 3b, Swiss 3c).
  * O showcase deixa de mostrar o menu fictício e passa a mostrar o layout de
  * orçamento real — o editor de paleta continua provando que trocar cor não
  * quebra o documento. `idioma` só troca a moeda/rótulos do exemplo.
@@ -246,7 +247,11 @@ function PainelTemplate({
             fontes={FONTES}
           />
         ) : (
-          <TemplateSwissStudio tema={tema} fontes={FONTES} idioma={idioma} />
+          <TemplateSwissStudio
+            {...exemploOrcamento(idioma)}
+            tema={tema}
+            fontes={FONTES}
+          />
         )}
       </div>
     </section>
