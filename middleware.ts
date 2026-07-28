@@ -90,6 +90,9 @@ const ROTAS_PUBLICAS = [
   // Preview dos templates premium (só conteúdo fictício de demonstração) —
   // público para revisão visual por link, sem exigir login.
   "/preview-templates",
+  // Preview da UI de toggles de blocos (Etapa 4, só conteúdo fictício) —
+  // trabalho interno de verificação visual, ainda fora do fluxo real.
+  "/preview-toggles",
   // Recuperação de senha: forgot-password (sem sessão) e reset-password
   // (só ganha a sessão de recuperação após trocar o code do link do e-mail).
   "/auth",

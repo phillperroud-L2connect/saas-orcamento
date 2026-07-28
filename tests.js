@@ -772,3 +772,46 @@ test("resolverBlocos devolve [] para template desconhecido", () => {
   assert.deepEqual(resolverBlocos("inexistente", null), []);
   assert.deepEqual(resolverBlocos(null, ["nota"]), []);
 });
+
+// ---------------------------------------------------------------------------
+// Rótulos legíveis dos blocos — camada de apresentação da UI de toggles
+// (lib/blocos-rotulos.js). Garante que nenhum blocoId técnico vaze para a tela.
+// ---------------------------------------------------------------------------
+import { ROTULOS_BLOCOS, rotuloBloco } from "./lib/blocos-rotulos.js";
+
+/** Todos os blocoIds distintos que aparecem em algum template. */
+const TODOS_BLOCOS = [
+  ...new Set(Object.values(BLOCOS_TEMPLATE).flat()),
+];
+
+test("todo blocoId de todo template tem rótulo nos dois idiomas", () => {
+  for (const id of TODOS_BLOCOS) {
+    const r = ROTULOS_BLOCOS[id];
+    assert.ok(r, `bloco "${id}" sem rótulo em ROTULOS_BLOCOS`);
+    assert.equal(typeof r.pt, "string", `${id}.pt deveria ser string`);
+    assert.equal(typeof r.es, "string", `${id}.es deveria ser string`);
+    assert.ok(r.pt.trim().length > 0, `${id}.pt vazio`);
+    assert.ok(r.es.trim().length > 0, `${id}.es vazio`);
+  }
+});
+
+test("ROTULOS_BLOCOS não tem rótulo órfão (id que não existe em template algum)", () => {
+  const validos = new Set(TODOS_BLOCOS);
+  for (const id of Object.keys(ROTULOS_BLOCOS)) {
+    assert.ok(validos.has(id), `rótulo órfão para "${id}" — não está em template algum`);
+  }
+});
+
+test("rotuloBloco devolve o texto do idioma pedido e cai em pt no idioma invalido", () => {
+  assert.equal(rotuloBloco("servicos", "pt"), "Serviços");
+  assert.equal(rotuloBloco("servicos", "es"), "Servicios");
+  // idioma ausente -> pt; idioma desconhecido -> pt
+  assert.equal(rotuloBloco("servicos"), "Serviços");
+  assert.equal(rotuloBloco("servicos", "xx"), "Serviços");
+});
+
+test("rotuloBloco é defensivo com blocoId invalido (devolve o proprio id, nunca quebra)", () => {
+  assert.equal(rotuloBloco("nao_existe"), "nao_existe");
+  assert.equal(rotuloBloco(null), "");
+  assert.equal(rotuloBloco(undefined), "");
+});
