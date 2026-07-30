@@ -120,6 +120,24 @@ export function getMpRedirectUri(): string {
 }
 
 /**
+ * Segredo do HMAC que assina o `state` do OAuth (CSRF/anti-forja).
+ *
+ * FAIL-CLOSED (decisão de segurança): se MP_OAUTH_STATE_SECRET estiver ausente
+ * ou for curto demais, LANÇA — a conexão do Mercado Pago fica desabilitada com
+ * erro claro, em vez de cair no comportamento inseguro (state = tenant_id cru).
+ * Gere um valor aleatório de 32+ bytes e defina no .env.local e na Vercel.
+ */
+export function getMpOAuthStateSecret(): string {
+  const secret = process.env.MP_OAUTH_STATE_SECRET;
+  if (!secret || secret.length < 16) {
+    throw new Error(
+      "MP_OAUTH_STATE_SECRET ausente ou curto: conexão do Mercado Pago desabilitada (fail-closed). Defina um segredo aleatório de 32+ bytes no .env.local e na Vercel.",
+    );
+  }
+  return secret;
+}
+
+/**
  * Credenciais da aplicação OAuth (client_id público + client_secret server-side),
  * escolhendo a gaveta conforme o país:
  *   - AR → NEXT_PUBLIC_MP_CLIENT_ID  / MP_CLIENT_SECRET     (aplicação Argentina)

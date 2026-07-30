@@ -21,6 +21,12 @@ import {
 } from "./lib/payment-audit-core.js";
 
 import {
+  gerarNonce,
+  assinarState,
+  verificarState,
+} from "./lib/mp-oauth-state.js";
+
+import {
   normalizarPais,
   moedaAssinatura,
   idiomaDoPais,
@@ -830,4 +836,95 @@ test("rotuloBloco é defensivo com blocoId invalido (devolve o proprio id, nunca
   assert.equal(rotuloBloco("nao_existe"), "nao_existe");
   assert.equal(rotuloBloco(null), "");
   assert.equal(rotuloBloco(undefined), "");
+});
+
+// ---------------------------------------------------------------------------
+// Item 1 (auditoria de segurança) — assinatura do `state` do OAuth do MP
+// ---------------------------------------------------------------------------
+
+const SECRET = "segredo-de-teste-com-tamanho-suficiente-123456";
+const OUTRO_SECRET = "outro-segredo-de-teste-completamente-diferente";
+
+test("assinarState → verificarState devolve os campos originais", () => {
+  const state = assinarState({ tenantId: "tenant-abc", nonce: "nonce-xyz" }, SECRET);
+  const v = verificarState(state, SECRET);
+  assert.equal(v.ok, true);
+  assert.equal(v.tenantId, "tenant-abc");
+  assert.equal(v.nonce, "nonce-xyz");
+  assert.ok(Number.isFinite(v.iat));
+});
+
+test("state é URL-safe (cabe no ?state= sem escapar)", () => {
+  const state = assinarState({ tenantId: "t", nonce: "n" }, SECRET);
+  assert.equal(state, encodeURIComponent(state));
+});
+
+test("segredo errado → assinatura_invalida (não confia no token forjado)", () => {
+  const state = assinarState({ tenantId: "vitima", nonce: "n" }, SECRET);
+  const v = verificarState(state, OUTRO_SECRET);
+  assert.equal(v.ok, false);
+  assert.equal(v.motivo, "assinatura_invalida");
+});
+
+test("payload adulterado (troca de tenant) → assinatura_invalida", () => {
+  const state = assinarState({ tenantId: "tenant-a", nonce: "n" }, SECRET);
+  const [, sig] = state.split(".");
+  // Reescreve o payload para outro tenant mantendo a assinatura antiga.
+  const forjado =
+    Buffer.from(JSON.stringify({ t: "tenant-b", n: "n", iat: Math.floor(Date.now() / 1000) }))
+      .toString("base64url") + "." + sig;
+  const v = verificarState(forjado, SECRET);
+  assert.equal(v.ok, false);
+  assert.equal(v.motivo, "assinatura_invalida");
+});
+
+test("assinatura adulterada → assinatura_invalida", () => {
+  const state = assinarState({ tenantId: "t", nonce: "n" }, SECRET);
+  const [payload] = state.split(".");
+  const v = verificarState(`${payload}.AAAA`, SECRET);
+  assert.equal(v.ok, false);
+  assert.equal(v.motivo, "assinatura_invalida");
+});
+
+test("state expirado → expirado", () => {
+  const iatVelho = Math.floor(Date.now() / 1000) - 3600; // 1h atrás
+  const state = assinarState({ tenantId: "t", nonce: "n", iat: iatVelho }, SECRET);
+  const v = verificarState(state, SECRET, { maxIdadeSegundos: 600 });
+  assert.equal(v.ok, false);
+  assert.equal(v.motivo, "expirado");
+});
+
+test("state no futuro (além do skew) → futuro", () => {
+  const iatFuturo = Math.floor(Date.now() / 1000) + 3600;
+  const state = assinarState({ tenantId: "t", nonce: "n", iat: iatFuturo }, SECRET);
+  const v = verificarState(state, SECRET);
+  assert.equal(v.ok, false);
+  assert.equal(v.motivo, "futuro");
+});
+
+test("token malformado → malformado (nunca lança)", () => {
+  assert.equal(verificarState("sem-ponto", SECRET).motivo, "malformado");
+  assert.equal(verificarState("", SECRET).motivo, "malformado");
+  assert.equal(verificarState(null, SECRET).motivo, "malformado");
+  assert.equal(verificarState(undefined, SECRET).motivo, "malformado");
+});
+
+test("secret ausente na verificação → secret_ausente (fail-closed)", () => {
+  const state = assinarState({ tenantId: "t", nonce: "n" }, SECRET);
+  assert.equal(verificarState(state, "").motivo, "secret_ausente");
+  assert.equal(verificarState(state, undefined).motivo, "secret_ausente");
+});
+
+test("assinarState lança sem tenant/nonce (erro de programação)", () => {
+  assert.throws(() => assinarState({ tenantId: "", nonce: "n" }, SECRET));
+  assert.throws(() => assinarState({ tenantId: "t", nonce: "" }, SECRET));
+  assert.throws(() => assinarState({ tenantId: "t", nonce: "n" }, ""));
+});
+
+test("gerarNonce produz valores únicos e URL-safe", () => {
+  const a = gerarNonce();
+  const b = gerarNonce();
+  assert.notEqual(a, b);
+  assert.equal(a, encodeURIComponent(a));
+  assert.ok(a.length >= 20);
 });

@@ -14,7 +14,6 @@ import {
 import { createClient } from "@/lib/supabase";
 import { useI18n } from "@/components/i18n-provider";
 import type { MoedaPreferida, Tenant } from "@/lib/types";
-import { normalizarPais, authDomainMp } from "@/lib/mp-paises";
 import {
   validarArquivoLogo,
   LOGO_MIME_PERMITIDOS,
@@ -35,6 +34,8 @@ const TEXTOS_MP = {
     desconectando: "Desconectando...",
     sucesso: "Conta do Mercado Pago conectada com sucesso!",
     falha: "Não foi possível conectar o Mercado Pago. Tente novamente.",
+    indisponivel:
+      "Conexão do Mercado Pago temporariamente indisponível (configuração pendente). Tente novamente mais tarde.",
     semConta: "Nenhuma conta conectada.",
   },
   es: {
@@ -47,6 +48,8 @@ const TEXTOS_MP = {
     desconectando: "Desconectando...",
     sucesso: "¡Cuenta de Mercado Pago conectada con éxito!",
     falha: "No se pudo conectar Mercado Pago. Intentá de nuevo.",
+    indisponivel:
+      "Conexión de Mercado Pago temporalmente no disponible (configuración pendiente). Probá de nuevo más tarde.",
     semConta: "Ninguna cuenta conectada.",
   },
 } as const;
@@ -290,39 +293,37 @@ export function ConfiguracoesForm() {
   }, []);
 
   /**
-   * Inicia o OAuth do Mercado Pago: redireciona o navegador para a tela de
-   * autorização do MP. O `state` leva o tenant_id para correlacionar o retorno.
-   * O redirect_uri é esta própria página (ver getMpRedirectUri no servidor).
+   * Inicia o OAuth do Mercado Pago de forma segura. Em vez de montar a URL (e o
+   * `state`) no browser, pede ao servidor: /api/mp/oauth/iniciar resolve o tenant
+   * da SESSÃO, assina o `state` (HMAC + nonce, anti-CSRF) e devolve a URL de
+   * autorização já pronta (gaveta AR/BR do tenant). O navegador só redireciona.
    */
-  function conectarMercadoPago() {
-    if (!tenantId) {
-      setErro(dict.orc.erroTenant);
-      return;
-    }
-    // Gaveta OAuth conforme o país do tenant: aplicação/domínio AR ou BR. O
-    // redirect_uri é idêntico nos dois (a página de configurações); o webhook
-    // /api/mp/oauth escolhe o client_secret pelo país ao trocar o código.
-    const pais = normalizarPais(tenant?.pais);
-    const clientId =
-      pais === "BR"
-        ? process.env.NEXT_PUBLIC_MP_CLIENT_ID_BR
-        : process.env.NEXT_PUBLIC_MP_CLIENT_ID;
-    if (!clientId) {
-      const sufixo = pais === "BR" ? "_BR" : "";
-      setErro(`NEXT_PUBLIC_MP_CLIENT_ID${sufixo} não configurado.`);
-      return;
-    }
-    const site = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-    const redirectUri = `${site}/dashboard/configuracoes`;
-    const params = new URLSearchParams({
-      client_id: clientId,
-      response_type: "code",
-      platform_id: "mp",
-      state: tenantId,
-      redirect_uri: redirectUri,
-    });
+  async function conectarMercadoPago() {
+    setErro(null);
     setConectandoMp(true);
-    window.location.href = `https://${authDomainMp(pais)}/authorization?${params.toString()}`;
+    try {
+      const res = await fetch("/api/mp/oauth/iniciar", {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (res.status === 503) {
+        // Fail-closed no servidor (segredo/credenciais ausentes).
+        setErro(txtMp.indisponivel);
+        setConectandoMp(false);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { url?: string };
+      if (!res.ok || !data.url) {
+        setErro(txtMp.falha);
+        setConectandoMp(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      console.error("[configuracoes] falha ao iniciar OAuth do MP:", err);
+      setErro(txtMp.falha);
+      setConectandoMp(false);
+    }
   }
 
   /** Desconecta a conta MP do prestador: limpa as colunas mp_* do tenant. */

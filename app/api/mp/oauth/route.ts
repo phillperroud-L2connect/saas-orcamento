@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import {
   getMpRedirectUri,
+  getMpOAuthStateSecret,
   trocarCodigoMpPorToken,
   buscarEmailContaMp,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { normalizarPais } from "@/lib/mp-paises";
+import { verificarState } from "@/lib/mp-oauth-state";
 import {
   aplicarRateLimit,
   limiterOauth,
@@ -14,27 +16,24 @@ import {
 } from "@/lib/rate-limit";
 
 /**
- * /api/mp/oauth — conexão da conta Mercado Pago do PRESTADOR (OAuth).
+ * POST /api/mp/oauth — troca do `code` do OAuth pelos tokens do PRESTADOR.
  *
- * Recebe o `code` de autorização do Mercado Pago, troca pelo access_token da
- * conta do prestador e salva no tenant identificado por `state` (= tenant_id).
- * A partir daí o tenant recebe os pagamentos dos clientes finais na sua conta.
+ * O `state` é um token ASSINADO (HMAC) emitido por /api/mp/oauth/iniciar; o
+ * tenant de destino vem do payload verificado — nunca de um id cru do chamador.
+ * Sem o segredo do servidor não há como forjar um state para outro tenant, então
+ * mesmo sendo chamada pública (prefixo /api/mp) a rota não redireciona tokens.
  *
- * `state` correlaciona o retorno ao tenant que iniciou a conexão. A persistência
- * usa a SERVICE ROLE (não depende de sessão), então a rota funciona tanto via
- * chamada server-side da página de configurações (POST) quanto como redirect_uri
- * direto (GET) em ambientes sem o reenvio do middleware.
+ * A ligação com a sessão + nonce (anti-CSRF) é conferida na página de callback
+ * (rota protegida) ANTES de chamar esta rota; aqui reforçamos a integridade do
+ * state (defesa em profundidade).
  *
- * Rota pública (prefixo /api/mp) — não envolve dados de outros tenants: o code
- * só é válido para a conta que autorizou, e o state aponta o tenant de destino.
+ * Fail-closed: sem MP_OAUTH_STATE_SECRET, responde 503 e nada é gravado.
+ *
+ * (O antigo fallback GET público foi removido: o redirect_uri é a página
+ * protegida de configurações, então o GET nunca era usado no fluxo normal.)
  */
 
-async function conectar(code: string, state: string) {
-  const tenantId = state.trim();
-  if (!code || !tenantId) {
-    return { ok: false as const, status: 400, erro: "code/state ausentes." };
-  }
-
+async function conectar(code: string, tenantId: string) {
   const supabase = createServiceSupabase();
 
   // 0. País do tenant → gaveta OAuth (client_secret AR ou BR) usada na troca.
@@ -76,6 +75,15 @@ export async function POST(req: Request) {
   const rl = await aplicarRateLimit(limiterOauth, `oauth:${getClientIp(req)}`);
   if (!rl.ok) return tooManyRequests(rl.retryAfter);
 
+  // Fail-closed: sem segredo, não há como validar o state → não conecta.
+  let secret: string;
+  try {
+    secret = getMpOAuthStateSecret();
+  } catch (err) {
+    console.error("[mp/oauth] segredo ausente (fail-closed):", err);
+    return NextResponse.json({ erro: "mp_oauth_indisponivel" }, { status: 503 });
+  }
+
   let body: { code?: string; state?: string };
   try {
     body = await req.json();
@@ -83,8 +91,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: "JSON inválido." }, { status: 400 });
   }
 
+  const code = (body.code ?? "").trim();
+  if (!code) {
+    return NextResponse.json({ erro: "code ausente." }, { status: 400 });
+  }
+
+  // Integridade do state: assinatura + expiração. O tenant vem do payload.
+  const v = verificarState(body.state, secret);
+  if (!v.ok) {
+    console.warn("[mp/oauth] state rejeitado:", v.motivo);
+    return NextResponse.json({ erro: "state_invalido" }, { status: 400 });
+  }
+
   try {
-    const r = await conectar(body.code ?? "", body.state ?? "");
+    const r = await conectar(code, v.tenantId);
     if (!r.ok) return NextResponse.json({ erro: r.erro }, { status: r.status });
     return NextResponse.json({ ok: true, email: r.email });
   } catch (err) {
@@ -93,34 +113,5 @@ export async function POST(req: Request) {
       { erro: "Não foi possível conectar o Mercado Pago." },
       { status: 502 },
     );
-  }
-}
-
-/** GET — suporte a redirect_uri direto. Após conectar, volta às configurações. */
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const code = searchParams.get("code") ?? "";
-  const state = searchParams.get("state") ?? "";
-  const destino = `${getMpRedirectUri()}`;
-
-  // Rate limit: em excesso, redireciona com mp=erro (preserva a UX do callback
-  // em vez de devolver um 429 cru no meio do fluxo de conexão).
-  const rl = await aplicarRateLimit(limiterOauth, `oauth:${getClientIp(req)}`);
-  if (!rl.ok) {
-    const url = new URL(destino);
-    url.searchParams.set("mp", "erro");
-    return NextResponse.redirect(url);
-  }
-
-  try {
-    const r = await conectar(code, state);
-    const url = new URL(destino);
-    url.searchParams.set("mp", r.ok ? "ok" : "erro");
-    return NextResponse.redirect(url);
-  } catch (err) {
-    console.error("[mp/oauth][GET] erro:", err);
-    const url = new URL(destino);
-    url.searchParams.set("mp", "erro");
-    return NextResponse.redirect(url);
   }
 }
