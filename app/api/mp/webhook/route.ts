@@ -300,7 +300,7 @@ export async function POST(req: Request) {
     // --- 4. E-mails (best-effort — não derrubam o webhook). -----------------
     await Promise.allSettled([
       withTimeout(
-        enviarLinkCadastro({ email, plano, linkCadastro }),
+        enviarLinkCadastro({ email, plano, linkCadastro, pais }),
         EMAIL_TIMEOUT_MS,
         "e-mail link de cadastro",
       ),

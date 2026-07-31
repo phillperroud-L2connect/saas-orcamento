@@ -38,6 +38,9 @@ import {
   PRECOS_ASSINATURA,
 } from "./lib/mp-paises.js";
 
+import { conteudoLinkCadastro, escapeHtml } from "./lib/email-core.js";
+import { nomePlanoLocalizado } from "./lib/planos-nomes.js";
+
 const KB = 1024;
 
 // ---------------------------------------------------------------------------
@@ -309,6 +312,101 @@ test("PRECOS_ASSINATURA: cobre os dois planos nos dois países", () => {
     assert.ok(PRECOS_ASSINATURA[plano].AR, `${plano} precisa de preço AR`);
     assert.ok(PRECOS_ASSINATURA[plano].BR, `${plano} precisa de preço BR`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// E-mail de link de cadastro — seleção de idioma PT/ES por país (Etapa 1)
+// (lib/email-core.js)
+// ---------------------------------------------------------------------------
+
+const LINK_FAKE = "https://app.exemplo.com/cadastro?token=abc-123";
+
+test("nomePlanoLocalizado: pt localiza Pro→Completo; es mantém Pro; basico igual", () => {
+  assert.equal(nomePlanoLocalizado("pro", "pt"), "Completo");
+  assert.equal(nomePlanoLocalizado("pro", "es"), "Pro");
+  assert.equal(nomePlanoLocalizado("basico", "pt"), "Básico");
+  assert.equal(nomePlanoLocalizado("basico", "es"), "Básico");
+  // Idioma inválido cai em es (default legado); plano desconhecido → "".
+  assert.equal(nomePlanoLocalizado("pro", "xx"), "Pro");
+  assert.equal(nomePlanoLocalizado("inexistente", "pt"), "");
+});
+
+test("conteudoLinkCadastro BR → português + nome localizado (Pro = Completo)", () => {
+  const { lang, subject, html } = conteudoLinkCadastro({
+    pais: "BR",
+    planoId: "pro",
+    linkCadastro: LINK_FAKE,
+  });
+  assert.equal(lang, "pt");
+  assert.equal(subject, "Ative sua conta — Gerador de Orçamento");
+  assert.ok(html.includes("Pagamento confirmado"), "corpo PT: título");
+  assert.ok(html.includes("Criar minha senha"), "corpo PT: botão");
+  assert.ok(html.includes("expira em 24 horas"), "corpo PT: validade");
+  // Nome localizado igual ao checkout: Pro no Brasil aparece como "Completo".
+  assert.ok(html.includes("Completo"), "PT/pro deve exibir 'Completo'");
+  assert.ok(!html.includes("Crear mi contraseña"), "não deve conter ES");
+});
+
+test("conteudoLinkCadastro AR → espanhol + nome mantém 'Pro'", () => {
+  const { lang, subject, html } = conteudoLinkCadastro({
+    pais: "AR",
+    planoId: "pro",
+    linkCadastro: LINK_FAKE,
+  });
+  assert.equal(lang, "es");
+  assert.equal(subject, "Activá tu cuenta — Generador de Presupuestos");
+  assert.ok(html.includes("Pago confirmado"), "corpo ES: título");
+  assert.ok(html.includes("Crear mi contraseña"), "corpo ES: botão");
+  assert.ok(html.includes("expira en 24 horas"), "corpo ES: validade");
+  assert.ok(html.includes("Pro"), "es/pro deve exibir 'Pro'");
+  assert.ok(!html.includes("Completo"), "es não deve virar Completo");
+  assert.ok(!html.includes("Criar minha senha"), "não deve conter PT");
+});
+
+test("conteudoLinkCadastro: país ausente/inválido cai em ES (default legado)", () => {
+  for (const pais of [undefined, null, "", "US", "xx"]) {
+    const { lang, subject } = conteudoLinkCadastro({
+      pais,
+      planoId: "basico",
+      linkCadastro: LINK_FAKE,
+    });
+    assert.equal(lang, "es", `país ${String(pais)} deveria cair em es`);
+    assert.equal(subject, "Activá tu cuenta — Generador de Presupuestos");
+  }
+});
+
+test("conteudoLinkCadastro: o link tokenizado aparece no href e no corpo", () => {
+  for (const pais of ["BR", "AR"]) {
+    const { html } = conteudoLinkCadastro({
+      pais,
+      planoId: "pro",
+      linkCadastro: LINK_FAKE,
+    });
+    assert.ok(html.includes(`href="${LINK_FAKE}"`), `href presente (${pais})`);
+    // Também no rodapé "copie e cole" (aparece 2x no total).
+    assert.ok(
+      html.split(LINK_FAKE).length - 1 >= 2,
+      `link deve aparecer ao menos 2x (${pais})`,
+    );
+  }
+});
+
+test("escapeHtml protege o nome do plano na montagem do e-mail", () => {
+  // Garantia de que o nome (venha de onde vier) é escapado antes de ir ao HTML.
+  assert.equal(
+    escapeHtml('<img src=x onerror=alert(1)>'),
+    "&lt;img src=x onerror=alert(1)&gt;",
+  );
+});
+
+test("escapeHtml: neutraliza os caracteres perigosos", () => {
+  assert.equal(
+    escapeHtml(`<a href="x">'&'</a>`),
+    "&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;",
+  );
+  // Defensivo: valores não-string não quebram.
+  assert.equal(escapeHtml(null), "");
+  assert.equal(escapeHtml(undefined), "");
 });
 
 // ---------------------------------------------------------------------------
