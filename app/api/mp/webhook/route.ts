@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { Payment } from "mercadopago";
 import {
   getMercadoPagoClient,
-  getSiteUrl,
   verificarAssinaturaMpWebhook,
 } from "@/lib/mercadopago";
 import { createServiceSupabase } from "@/lib/supabase-service";
 import { getPlano, getPrecoPorPeriodo, isPeriodo } from "@/lib/planos";
 import { normalizarPais, moedaAssinatura } from "@/lib/mp-paises";
-import { enviarLinkCadastro, notificarAdminNovaVenda } from "@/lib/email";
+import { notificarAdminNovaVenda } from "@/lib/email";
+import { garantirOnboarding } from "@/lib/onboarding";
+import { decidirEstensaoPagamento } from "@/lib/onboarding-core";
 import {
   aplicarRateLimit,
   limiterWebhook,
@@ -199,20 +200,30 @@ export async function POST(req: Request) {
       "registrar assinatura",
     );
 
+    // Pagamento duplicado (retentativa do MP): NÃO é reprocessado. A cobrança
+    // já está registrada e é idempotente via mp_payment_id (UNIQUE). Seguimos
+    // adiante APENAS para garantir a entrega do onboarding, se ainda faltar.
+    let pagamentoDuplicado = false;
     if (insertErr) {
-      // 23505 = unique_violation → webhook duplicado, já provisionado.
       if (insertErr.code === "23505") {
-        return NextResponse.json({ duplicado: true }, { status: 200 });
+        pagamentoDuplicado = true;
+      } else {
+        console.error("[mp/webhook] erro ao registrar assinatura:", insertErr);
+        return NextResponse.json({ erro: "db" }, { status: 500 });
       }
-      console.error("[mp/webhook] erro ao registrar assinatura:", insertErr);
-      return NextResponse.json({ erro: "db" }, { status: 500 });
     }
 
-    // --- 3a. RENOVAÇÃO: estende o vencimento direto no tenant. ---------------
-    // Espelha o botão "Marcar como pago" do admin, estendendo a partir do
-    // vencimento atual (se ainda no futuro) para não perder os dias restantes.
-    // NÃO recria cadastro nem envia link — a conta já existe.
-    if (tenantExistente?.id) {
+    const tenantExiste = !!tenantExistente?.id;
+
+    // --- 3. LADO PAGAMENTO (renovação): estende o vencimento SÓ na 1ª vez. ---
+    // decidirEstensaoPagamento garante a idempotência: em QUALQUER retentativa
+    // (pagamentoDuplicado === true) o resultado é false — nunca estende o
+    // vencimento nem conta receita duas vezes. Espelha o "Marcar como pago" do
+    // admin, estendendo a partir do vencimento atual (se ainda no futuro).
+    if (
+      decidirEstensaoPagamento({ pagamentoDuplicado, tenantExiste }) &&
+      tenantExistente?.id
+    ) {
       try {
         const agora = new Date();
         const base =
@@ -257,61 +268,44 @@ export async function POST(req: Request) {
         valor: payment.transaction_amount ?? getPrecoPorPeriodo(plano, periodo, pais),
         detalhe: { renovacao: true, plano: plano.id, periodo },
       });
+    }
 
+    // --- 4. LADO ONBOARDING (recuperável): garante token + e-mail. ----------
+    // NÃO toca em `assinaturas` nem estende vencimento — só onboarding_tokens +
+    // e-mail. Seguro em retentativa: (re)gera o token e reenvia o link enquanto
+    // a entrega não for confirmada, sem reprocessar o pagamento. Se o tenant já
+    // existe (renovação), a função é no-op (o cliente já tem acesso).
+    const onb = await garantirOnboarding(supabase, {
+      email,
+      plano,
+      periodo,
+      pais,
+      tenantExiste,
+    });
+
+    // Notifica o admin da venda apenas na PRIMEIRA vez (não duplicado), para não
+    // reenviar a notificação a cada retentativa. Best-effort (não derruba nada).
+    if (!pagamentoDuplicado) {
       await Promise.allSettled([
         withTimeout(
           notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano, periodo, pais }),
           EMAIL_TIMEOUT_MS,
-          "e-mail notificar admin (renovação)",
+          "e-mail notificar admin",
         ),
       ]);
-
-      return NextResponse.json({ ok: true, renovacao: true }, { status: 200 });
     }
 
-    // --- 3b. VENDA NOVA: gera o token de cadastro (válido por 24h). ----------
-    // Em vez de criar o tenant agora, o cliente define a senha pelo link
-    // tokenizado; a conta + tenant são provisionados em /api/cadastro/token.
-    const token = crypto.randomUUID();
-    const expiraEm = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // Entrega do onboarding falhou (e-mail/token) → 500 para o Mercado Pago
+    // reenviar e recuperar. O pagamento NÃO é reprocessado na retentativa
+    // (assinatura já registrada, idempotente); só o onboarding é refeito.
+    if (onb.precisaRetry) {
+      return NextResponse.json({ erro: "onboarding_pendente" }, { status: 500 });
+    }
 
-    const { error: tokenErr } = await withTimeout(
-      supabase.from("onboarding_tokens").insert({
-        email,
-        token,
-        plano: plano.id,
-        periodo,
-        // País carregado até o provisionamento: define pais/idioma/moeda do
-        // tenant em /api/cadastro/token (AR → es/ARS, BR → pt/BRL).
-        pais,
-        expira_em: expiraEm.toISOString(),
-      }),
-      DB_TIMEOUT_MS,
-      "gravar token de onboarding",
+    return NextResponse.json(
+      { ok: true, renovacao: tenantExiste, onboarding: onb.acao },
+      { status: 200 },
     );
-
-    if (tokenErr) {
-      console.error("[mp/webhook] erro ao gravar token de onboarding:", tokenErr);
-      return NextResponse.json({ erro: "db" }, { status: 500 });
-    }
-
-    const linkCadastro = `${getSiteUrl()}/cadastro?token=${token}`;
-
-    // --- 4. E-mails (best-effort — não derrubam o webhook). -----------------
-    await Promise.allSettled([
-      withTimeout(
-        enviarLinkCadastro({ email, plano, linkCadastro, pais }),
-        EMAIL_TIMEOUT_MS,
-        "e-mail link de cadastro",
-      ),
-      withTimeout(
-        notificarAdminNovaVenda({ nome: nome || email, email, whatsapp, plano, periodo, pais }),
-        EMAIL_TIMEOUT_MS,
-        "e-mail notificar admin",
-      ),
-    ]);
-
-    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {
     console.error("[mp/webhook] erro inesperado:", err);
     // 500 → o Mercado Pago reenvia a notificação mais tarde.

@@ -40,6 +40,10 @@ import {
 
 import { conteudoLinkCadastro, escapeHtml } from "./lib/email-core.js";
 import { nomePlanoLocalizado } from "./lib/planos-nomes.js";
+import {
+  decidirEstensaoPagamento,
+  decidirOnboarding,
+} from "./lib/onboarding-core.js";
 
 const KB = 1024;
 
@@ -407,6 +411,108 @@ test("escapeHtml: neutraliza os caracteres perigosos", () => {
   // Defensivo: valores não-string não quebram.
   assert.equal(escapeHtml(null), "");
   assert.equal(escapeHtml(undefined), "");
+});
+
+// ---------------------------------------------------------------------------
+// Webhook de pagamento — separação pagamento (idempotente) x onboarding
+// (recuperável) — Etapa 2 (lib/onboarding-core.js)
+// ---------------------------------------------------------------------------
+
+// Combinações possíveis de estado, para varreduras de invariante.
+const BOOLS = [false, true];
+
+test("decidirEstensaoPagamento: estende só na 1ª vez de uma renovação", () => {
+  // Renovação (tenant existe), primeira vez (não duplicado) → estende.
+  assert.equal(
+    decidirEstensaoPagamento({ pagamentoDuplicado: false, tenantExiste: true }),
+    true,
+  );
+  // Venda nova (sem tenant), primeira vez → não há vencimento a estender.
+  assert.equal(
+    decidirEstensaoPagamento({ pagamentoDuplicado: false, tenantExiste: false }),
+    false,
+  );
+});
+
+test("INVARIANTE idempotência: pagamento duplicado NUNCA estende (nem conta 2x)", () => {
+  // O ponto crítico combinado com o Philip: qualquer retentativa do Mercado Pago
+  // (pagamentoDuplicado === true) não pode disparar efeito de dinheiro —
+  // independentemente de existir tenant ou não.
+  for (const tenantExiste of BOOLS) {
+    assert.equal(
+      decidirEstensaoPagamento({ pagamentoDuplicado: true, tenantExiste }),
+      false,
+      `duplicado + tenant=${tenantExiste} deveria NÃO estender`,
+    );
+  }
+});
+
+test("decidirOnboarding: venda nova sem token → cria e envia", () => {
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: false,
+      emailConfirmado: false,
+    }),
+    "criar_e_enviar",
+  );
+});
+
+test("decidirOnboarding: RISCO B — token existe mas e-mail não confirmado → reenvia", () => {
+  // 1ª tentativa gravou o token mas o e-mail falhou; a retentativa recupera
+  // reenviando o MESMO token, sem reprocessar o pagamento.
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: true,
+      emailConfirmado: false,
+    }),
+    "reenviar",
+  );
+});
+
+test("decidirOnboarding: já entregue (token válido + e-mail confirmado) → nenhum (anti-spam)", () => {
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: true,
+      emailConfirmado: true,
+    }),
+    "nenhum",
+  );
+});
+
+test("decidirOnboarding: token expirado/ausente e e-mail nunca confirmado → cria e envia", () => {
+  // tokenUtilizavel=false cobre 'expirado' e 'usado' e 'inexistente'.
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: false,
+      emailConfirmado: false,
+    }),
+    "criar_e_enviar",
+  );
+});
+
+test("decidirOnboarding: tenant já existe → nunca envia (cliente já tem acesso)", () => {
+  for (const tokenUtilizavel of BOOLS) {
+    for (const emailConfirmado of BOOLS) {
+      assert.equal(
+        decidirOnboarding({ tenantExiste: true, tokenUtilizavel, emailConfirmado }),
+        "nenhum",
+        `tenant existe deveria ser sempre 'nenhum'`,
+      );
+    }
+  }
+});
+
+test("INVARIANTE estrutural: onboarding não depende do estado de pagamento", () => {
+  // decidirOnboarding NEM recebe pagamentoDuplicado — logo nenhuma decisão de
+  // onboarding pode disparar um efeito de pagamento. Este teste documenta e
+  // trava esse contrato: a saída independe de qualquer campo de pagamento.
+  const base = { tenantExiste: false, tokenUtilizavel: true, emailConfirmado: false };
+  const comLixoDePagamento = { ...base, pagamentoDuplicado: true, valor: 999 };
+  assert.equal(decidirOnboarding(base), decidirOnboarding(comLixoDePagamento));
 });
 
 // ---------------------------------------------------------------------------
