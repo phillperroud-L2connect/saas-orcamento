@@ -272,10 +272,10 @@ test("authDomainMp: domínio de autorização correto por país", () => {
 });
 
 test("precoAssinatura BR: valores em BRL definidos pelo cliente", () => {
-  assert.equal(precoAssinatura("basico", "mensal", "BR"), 29.9);
-  assert.equal(precoAssinatura("basico", "anual", "BR"), 299.0);
-  assert.equal(precoAssinatura("pro", "mensal", "BR"), 38.89);
-  assert.equal(precoAssinatura("pro", "anual", "BR"), 388.9);
+  assert.equal(precoAssinatura("basico", "mensal", "BR"), 19.89);
+  assert.equal(precoAssinatura("basico", "anual", "BR"), 198.9);
+  assert.equal(precoAssinatura("pro", "mensal", "BR"), 27.49);
+  assert.equal(precoAssinatura("pro", "anual", "BR"), 274.9);
 });
 
 test("precoAssinatura AR: valores em ARS preservados (sem regressão)", () => {
