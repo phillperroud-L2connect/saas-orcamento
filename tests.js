@@ -43,6 +43,7 @@ import { nomePlanoLocalizado } from "./lib/planos-nomes.js";
 import {
   decidirEstensaoPagamento,
   decidirOnboarding,
+  decidirReenvioAtivacao,
 } from "./lib/onboarding-core.js";
 
 const KB = 1024;
@@ -513,6 +514,71 @@ test("INVARIANTE estrutural: onboarding não depende do estado de pagamento", ()
   const base = { tenantExiste: false, tokenUtilizavel: true, emailConfirmado: false };
   const comLixoDePagamento = { ...base, pagamentoDuplicado: true, valor: 999 };
   assert.equal(decidirOnboarding(base), decidirOnboarding(comLixoDePagamento));
+});
+
+// ---------------------------------------------------------------------------
+// Reenvio manual da ativação pelo admin — Etapa 3 (lib/onboarding-core.js)
+// ---------------------------------------------------------------------------
+
+test("forcarReenvio: reenvio manual reenvia MESMO com e-mail já confirmado (o webhook não)", () => {
+  const estado = { tenantExiste: false, tokenUtilizavel: true, emailConfirmado: true };
+  // Webhook automático (default false): anti-spam → nenhum.
+  assert.equal(decidirOnboarding(estado), "nenhum");
+  // Admin (forcarReenvio true): força o reenvio reusando o token válido.
+  assert.equal(decidirOnboarding({ ...estado, forcarReenvio: true }), "reenviar");
+});
+
+test("forcarReenvio: sem token utilizável → cria e envia um token novo (24h)", () => {
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: false,
+      emailConfirmado: true,
+      forcarReenvio: true,
+    }),
+    "criar_e_enviar",
+  );
+});
+
+test("INVARIANTE forcarReenvio: tenant já ativado NUNCA reenvia, nem forçado", () => {
+  // A prioridade de tenantExiste vence forcarReenvio — não spammar quem já ativou.
+  for (const tokenUtilizavel of BOOLS) {
+    for (const emailConfirmado of BOOLS) {
+      assert.equal(
+        decidirOnboarding({
+          tenantExiste: true,
+          tokenUtilizavel,
+          emailConfirmado,
+          forcarReenvio: true,
+        }),
+        "nenhum",
+        "tenant existe deveria ser sempre 'nenhum', mesmo forçando",
+      );
+    }
+  }
+});
+
+test("decidirReenvioAtivacao: pago e sem tenant → permitido", () => {
+  assert.deepEqual(
+    decidirReenvioAtivacao({ temAssinaturaPaga: true, tenantExiste: false }),
+    { permitido: true, motivo: null },
+  );
+});
+
+test("decidirReenvioAtivacao: sem assinatura paga → bloqueado (nada a ativar)", () => {
+  for (const tenantExiste of BOOLS) {
+    assert.deepEqual(
+      decidirReenvioAtivacao({ temAssinaturaPaga: false, tenantExiste }),
+      { permitido: false, motivo: "sem_assinatura_paga" },
+    );
+  }
+});
+
+test("decidirReenvioAtivacao: já ativado (tem tenant) → bloqueado", () => {
+  assert.deepEqual(
+    decidirReenvioAtivacao({ temAssinaturaPaga: true, tenantExiste: true }),
+    { permitido: false, motivo: "ja_ativado" },
+  );
 });
 
 // ---------------------------------------------------------------------------

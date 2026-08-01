@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Building2, Clock } from "lucide-react";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { TenantRow } from "@/components/admin/tenant-row";
+import { ReenviarAtivacaoButton } from "@/components/admin/reenviar-ativacao-button";
 import type { Tenant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -156,8 +157,13 @@ export default async function AdminPage() {
                       Aguardando
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-right text-xs text-gray-400">
-                    {new Date(p.created_at).toLocaleDateString("pt-BR")}
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center justify-end gap-3">
+                      <ReenviarAtivacaoButton email={p.email} />
+                      <span className="text-xs text-gray-400">
+                        {new Date(p.created_at).toLocaleDateString("pt-BR")}
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ))}

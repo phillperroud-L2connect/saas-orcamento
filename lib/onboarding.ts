@@ -49,11 +49,17 @@ type GarantirOnboardingParams = {
   pais: Pais;
   /** Já existe tenant para o e-mail? (renovação / conta já ativada) */
   tenantExiste: boolean;
+  /**
+   * Força o reenvio mesmo que o e-mail já tenha sido confirmado. SÓ o reenvio
+   * manual do admin (ação humana deliberada) passa true; o webhook do MP nunca,
+   * para que retentativas automáticas jamais reenviem em duplicidade.
+   */
+  forcarReenvio?: boolean;
 };
 
 export async function garantirOnboarding(
   supabase: SupabaseClient,
-  { email, plano, periodo, pais, tenantExiste }: GarantirOnboardingParams,
+  { email, plano, periodo, pais, tenantExiste, forcarReenvio = false }: GarantirOnboardingParams,
 ): Promise<ResultadoOnboarding> {
   // Estado do onboarding: o token mais recente do e-mail (se houver).
   const { data: tok } = await withTimeout(
@@ -73,7 +79,7 @@ export async function garantirOnboarding(
     !!tok && !tok.usado && new Date(tok.expira_em).getTime() > agora;
   const emailConfirmado = !!tok && !!tok.email_enviado_em;
 
-  const acao = decidirOnboarding({ tenantExiste, tokenUtilizavel, emailConfirmado });
+  const acao = decidirOnboarding({ tenantExiste, tokenUtilizavel, emailConfirmado, forcarReenvio });
   if (acao === "nenhum") {
     return { acao, enviado: false, precisaRetry: false };
   }
