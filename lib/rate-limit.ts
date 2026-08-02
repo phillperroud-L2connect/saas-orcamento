@@ -55,6 +55,13 @@ export const limiterStatus = criarLimiter(60, "1 m", "rl:status");
 // baixo volume legítimo, 20/min por IP protege contra abuso sem atrapalhar.
 export const limiterOauth = criarLimiter(20, "1 m", "rl:oauth");
 export const limiterAdmin = criarLimiter(20, "1 m", "rl:admin");
+// reativação self-serve de token expirado (/api/cadastro/reenviar) — rota PÚBLICA.
+// Dois limiters, ambos chaveados por dado OPACO (IP / hash do token), nunca pelo
+// e-mail resolvido: assim o 429 é contado em TODA requisição e não revela se a
+// conta existe/pagou (anti-enumeração). Por IP corta varredura em massa; por
+// token corta flood do inbox de uma vítima via um mesmo link.
+export const limiterReativacaoIp = criarLimiter(5, "15 m", "rl:reativacao-ip");
+export const limiterReativacaoToken = criarLimiter(3, "1 h", "rl:reativacao-tok");
 
 export type RateLimitResult = {
   ok: boolean;

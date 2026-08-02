@@ -44,6 +44,7 @@ import {
   decidirEstensaoPagamento,
   decidirOnboarding,
   decidirReenvioAtivacao,
+  padDeTempo,
 } from "./lib/onboarding-core.js";
 
 const KB = 1024;
@@ -579,6 +580,44 @@ test("decidirReenvioAtivacao: já ativado (tem tenant) → bloqueado", () => {
     decidirReenvioAtivacao({ temAssinaturaPaga: true, tenantExiste: true }),
     { permitido: false, motivo: "ja_ativado" },
   );
+});
+
+// --- padDeTempo: constante-tempo da rota pública de reativação --------------
+// Etapa 4: a defesa anti-enumeração por TIMING depende deste pad nunca ser
+// negativo (senão sleep negativo/loop) nem NaN. Invariante: sempre em [0, budget].
+
+test("padDeTempo: trabalho dentro do orçamento → dorme o restante", () => {
+  assert.equal(padDeTempo(1500, 400), 1100);
+});
+
+test("padDeTempo: orçamento exato → 0 (não negativo)", () => {
+  assert.equal(padDeTempo(1500, 1500), 0);
+});
+
+test("padDeTempo: trabalho EXCEDEU o orçamento → 0 (nunca negativo)", () => {
+  // O caminho lento (envio Resend acima do budget) jamais produz sleep negativo.
+  assert.equal(padDeTempo(1500, 5000), 0);
+});
+
+test("padDeTempo: entradas inválidas (NaN/negativas) nunca viram sleep inválido", () => {
+  // Robustez: nada de NaN (dormir para sempre) nem negativo, sob qualquer lixo.
+  assert.equal(padDeTempo(NaN, 100), 0);
+  assert.equal(padDeTempo(1500, NaN), 1500);
+  assert.equal(padDeTempo(1500, -200), 1500);
+  assert.equal(padDeTempo(-1, 100), 0);
+  assert.equal(padDeTempo(Infinity, 100), 0);
+});
+
+test("padDeTempo: resultado SEMPRE em [0, budget] (fuzz determinístico)", () => {
+  const budgets = [0, 1, 500, 1500, 9999];
+  const decorridos = [0, 1, 250, 1500, 3000, 100000];
+  for (const b of budgets) {
+    for (const d of decorridos) {
+      const r = padDeTempo(b, d);
+      assert.ok(r >= 0, `pad negativo: budget=${b} decorrido=${d} → ${r}`);
+      assert.ok(r <= Math.max(b, 0), `pad acima do budget: budget=${b} decorrido=${d} → ${r}`);
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------

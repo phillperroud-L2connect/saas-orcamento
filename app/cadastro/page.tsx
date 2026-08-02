@@ -30,7 +30,7 @@ function Casca({ children }: { children?: React.ReactNode }) {
   );
 }
 
-type EstadoToken = "validando" | "valido" | "invalido";
+type EstadoToken = "validando" | "valido" | "invalido" | "expirado";
 
 const PLANO_LABEL: Record<string, string> = {
   basico: "Básico",
@@ -57,6 +57,10 @@ function CadastroConteudo() {
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
 
+  // --- Reenvio self-serve (token expirado) ---------------------------------
+  const [reenviando, setReenviando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
+
   // Valida o token assim que a página carrega (se houver).
   useEffect(() => {
     if (!token) return;
@@ -75,7 +79,10 @@ function CadastroConteudo() {
           setPlanoToken(data.plano);
           setEstadoToken("valido");
         } else {
-          setEstadoToken("invalido");
+          // Só o link EXPIRADO ganha o botão de reenvio self-serve; usado/
+          // malformado continua no fluxo "contactar soporte" (reenviar um link
+          // já consumido não faz sentido).
+          setEstadoToken(data.motivo === "expirado" ? "expirado" : "invalido");
         }
       } catch {
         if (ativo) setEstadoToken("invalido");
@@ -170,6 +177,25 @@ function CadastroConteudo() {
     router.refresh();
   }
 
+  // Reenvio self-serve: pede um link novo para o token expirado. A resposta do
+  // servidor é sempre genérica (anti-enumeração), então mostramos SEMPRE a mesma
+  // mensagem, sem revelar se havia assinatura pendente para o e-mail.
+  async function handleReenviar() {
+    if (!token || reenviando || reenviado) return;
+    setReenviando(true);
+    try {
+      await fetch("/api/cadastro/reenviar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+    } catch {
+      // Silencioso de propósito: o desfecho exibido não depende da resposta.
+    }
+    setReenviado(true);
+    setReenviando(false);
+  }
+
   // --- Estado: validando o token -------------------------------------------
   if (token && estadoToken === "validando") {
     return (
@@ -181,7 +207,48 @@ function CadastroConteudo() {
     );
   }
 
-  // --- Estado: token inválido / expirado / usado ---------------------------
+  // --- Estado: token EXPIRADO → reenvio self-serve -------------------------
+  if (token && estadoToken === "expirado") {
+    return (
+      <Casca>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+          Enlace expirado
+        </h1>
+        {reenviado ? (
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Si hay una suscripción pendiente para este e-mail, te reenviamos el
+            enlace de activación. Revisá tu casilla (y la carpeta de spam).
+          </p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Tu enlace de activación venció. Podés pedir uno nuevo y te lo
+              reenviamos por e-mail.
+            </p>
+            <button
+              type="button"
+              onClick={handleReenviar}
+              disabled={reenviando}
+              className="mt-6 block w-full rounded-lg bg-gray-900 px-4 py-2 text-center text-sm font-medium text-white transition hover:bg-gray-800 disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+            >
+              {reenviando ? "Enviando…" : "Reenviarme el enlace"}
+            </button>
+          </>
+        )}
+        <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
+          ¿Ya tenés cuenta?{" "}
+          <Link
+            href="/login"
+            className="font-medium text-gray-900 underline-offset-2 hover:underline dark:text-gray-100"
+          >
+            Iniciar sesión
+          </Link>
+        </p>
+      </Casca>
+    );
+  }
+
+  // --- Estado: token inválido / usado --------------------------------------
   if (token && estadoToken === "invalido") {
     return (
       <Casca>
@@ -189,8 +256,8 @@ function CadastroConteudo() {
           Enlace no válido
         </h1>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-          Este enlace de activación expiró o ya fue utilizado. Escribinos y te
-          enviamos uno nuevo.
+          Este enlace de activación ya fue utilizado o no es válido. Escribinos y
+          te ayudamos.
         </p>
         <a
           href="mailto:philip@l2connect.com.br"

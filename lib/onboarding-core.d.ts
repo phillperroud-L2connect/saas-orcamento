@@ -24,3 +24,6 @@ export function decidirReenvioAtivacao(estado: {
   temAssinaturaPaga: boolean;
   tenantExiste: boolean;
 }): { permitido: boolean; motivo: MotivoReenvioBloqueado | null };
+
+/** ms a dormir p/ padronizar o tempo de resposta; sempre em [0, budgetMs]. */
+export function padDeTempo(budgetMs: number, decorridoMs: number): number;
