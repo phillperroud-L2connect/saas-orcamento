@@ -15,8 +15,8 @@ export function GET() {
     scope: "/",
     display: "standalone",
     orientation: "portrait-primary",
-    background_color: "#ffffff",
-    theme_color: "#111827",
+    background_color: "#05070d",
+    theme_color: "#05070d",
     lang: "pt-BR",
     categories: ["business", "productivity"],
     icons: [
