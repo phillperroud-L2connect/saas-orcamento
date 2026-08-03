@@ -6,6 +6,7 @@ import {
   type Plano,
 } from "@/lib/planos";
 import type { Pais } from "@/lib/types";
+import { conteudoLinkCadastro, escapeHtml } from "./email-core";
 
 /**
  * Camada de e-mail transacional via Resend.
@@ -89,74 +90,47 @@ type LinkCadastroParams = {
   plano: Plano;
   /** Link tokenizado: https://.../cadastro?token=<token> */
   linkCadastro: string;
+  /** País da venda → idioma do e-mail (BR → pt, senão es). Default legado AR. */
+  pais?: Pais;
 };
 
 /**
  * E-mail enviado logo após o pagamento aprovado, com o link tokenizado para o
  * cliente criar a senha e ativar a conta. Visual escuro (#0f172a) com azul
- * (#3ea6ff), texto em espanhol. Best-effort (ver getResend).
+ * (#3ea6ff); o idioma (PT/ES) vem do `pais` da venda — o mesmo que decide moeda
+ * e credenciais (idiomaDoPais), sem detecção nova.
+ *
+ * Retorna `true` se o Resend confirmou o envio; `false` se a chave está ausente
+ * ou o provedor devolveu erro. (Best-effort no call-site atual; o retorno passa
+ * a ser consumido na Etapa 2 para tornar a entrega recuperável.)
  */
 export async function enviarLinkCadastro({
   email,
   plano,
   linkCadastro,
-}: LinkCadastroParams): Promise<void> {
+  pais = "AR",
+}: LinkCadastroParams): Promise<boolean> {
   const resend = getResend();
-  if (!resend) return;
+  if (!resend) return false;
 
-  const html = `
-  <div style="background:#0f172a;padding:32px 16px;font-family:Arial,Helvetica,sans-serif">
-    <div style="max-width:520px;margin:0 auto;background:#0f172a">
-      <div style="border:1px solid #1e293b;border-radius:16px;padding:32px;background:#111c33">
-        <h1 style="font-size:22px;margin:0 0 8px;color:#f8fafc;font-weight:700">
-          ¡Pago confirmado! 🎉
-        </h1>
-        <p style="color:#cbd5e1;line-height:1.6;font-size:15px;margin:0 0 4px">
-          Recibimos tu pago del plan
-          <strong style="color:#3ea6ff">${escapeHtml(plano.nome)}</strong>.
-        </p>
-        <p style="color:#cbd5e1;line-height:1.6;font-size:15px;margin:0 0 24px">
-          Solo falta un paso: creá tu contraseña para activar tu cuenta y
-          empezar a generar presupuestos.
-        </p>
-        <p style="margin:0 0 24px">
-          <a href="${linkCadastro}"
-             style="background:#3ea6ff;color:#0f172a;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block">
-            Crear mi contraseña
-          </a>
-        </p>
-        <p style="color:#f59e0b;font-size:13px;line-height:1.6;margin:0 0 20px">
-          ⏳ Este enlace expira en 24 horas.
-        </p>
-        <p style="color:#cbd5e1;font-size:13px;line-height:1.6;margin:0 0 20px">
-          💡 Después de entrar, instalá la app en tu celular o computadora para
-          abrir el generador con un toque: en el menú del navegador elegí
-          <strong style="color:#3ea6ff">“Instalar app”</strong> o
-          <strong style="color:#3ea6ff">“Agregar a la pantalla de inicio”</strong>.
-        </p>
-        <p style="color:#64748b;font-size:12px;line-height:1.6;margin:0 0 24px">
-          Si el botón no funciona, copiá y pegá este enlace en tu navegador:<br>
-          <span style="color:#3ea6ff;word-break:break-all">${linkCadastro}</span>
-        </p>
-        <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0">
-        <p style="color:#94a3b8;font-size:13px;line-height:1.6;margin:0">
-          Equipo L2connect<br>
-          <a href="mailto:philip@l2connect.com.br" style="color:#3ea6ff;text-decoration:none">philip@l2connect.com.br</a>
-        </p>
-      </div>
-    </div>
-  </div>`;
+  const { subject, html } = conteudoLinkCadastro({
+    pais,
+    planoId: plano.id,
+    linkCadastro,
+  });
 
   const { error } = await resend.emails.send({
     from: FROM,
     to: email,
-    subject: "Activá tu cuenta — Generador de Presupuestos",
+    subject,
     html,
   });
 
   if (error) {
     console.error("[email] Falha ao enviar link de cadastro:", error);
+    return false;
   }
+  return true;
 }
 
 type NotificacaoAdminParams = {
@@ -317,14 +291,4 @@ export async function enviarRecuperacaoAdmin({
   if (error) {
     console.error("[email] Falha ao enviar recuperação do admin:", error);
   }
-}
-
-/** Escapa caracteres perigosos para interpolação segura em HTML. */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }

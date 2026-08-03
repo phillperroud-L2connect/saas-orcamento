@@ -38,6 +38,15 @@ import {
   PRECOS_ASSINATURA,
 } from "./lib/mp-paises.js";
 
+import { conteudoLinkCadastro, escapeHtml } from "./lib/email-core.js";
+import { nomePlanoLocalizado } from "./lib/planos-nomes.js";
+import {
+  decidirEstensaoPagamento,
+  decidirOnboarding,
+  decidirReenvioAtivacao,
+  padDeTempo,
+} from "./lib/onboarding-core.js";
+
 const KB = 1024;
 
 // ---------------------------------------------------------------------------
@@ -308,6 +317,306 @@ test("PRECOS_ASSINATURA: cobre os dois planos nos dois países", () => {
   for (const plano of ["basico", "pro"]) {
     assert.ok(PRECOS_ASSINATURA[plano].AR, `${plano} precisa de preço AR`);
     assert.ok(PRECOS_ASSINATURA[plano].BR, `${plano} precisa de preço BR`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// E-mail de link de cadastro — seleção de idioma PT/ES por país (Etapa 1)
+// (lib/email-core.js)
+// ---------------------------------------------------------------------------
+
+const LINK_FAKE = "https://app.exemplo.com/cadastro?token=abc-123";
+
+test("nomePlanoLocalizado: pt localiza Pro→Completo; es mantém Pro; basico igual", () => {
+  assert.equal(nomePlanoLocalizado("pro", "pt"), "Completo");
+  assert.equal(nomePlanoLocalizado("pro", "es"), "Pro");
+  assert.equal(nomePlanoLocalizado("basico", "pt"), "Básico");
+  assert.equal(nomePlanoLocalizado("basico", "es"), "Básico");
+  // Idioma inválido cai em es (default legado); plano desconhecido → "".
+  assert.equal(nomePlanoLocalizado("pro", "xx"), "Pro");
+  assert.equal(nomePlanoLocalizado("inexistente", "pt"), "");
+});
+
+test("conteudoLinkCadastro BR → português + nome localizado (Pro = Completo)", () => {
+  const { lang, subject, html } = conteudoLinkCadastro({
+    pais: "BR",
+    planoId: "pro",
+    linkCadastro: LINK_FAKE,
+  });
+  assert.equal(lang, "pt");
+  assert.equal(subject, "Ative sua conta — Gerador de Orçamento");
+  assert.ok(html.includes("Pagamento confirmado"), "corpo PT: título");
+  assert.ok(html.includes("Criar minha senha"), "corpo PT: botão");
+  assert.ok(html.includes("expira em 24 horas"), "corpo PT: validade");
+  // Nome localizado igual ao checkout: Pro no Brasil aparece como "Completo".
+  assert.ok(html.includes("Completo"), "PT/pro deve exibir 'Completo'");
+  assert.ok(!html.includes("Crear mi contraseña"), "não deve conter ES");
+});
+
+test("conteudoLinkCadastro AR → espanhol + nome mantém 'Pro'", () => {
+  const { lang, subject, html } = conteudoLinkCadastro({
+    pais: "AR",
+    planoId: "pro",
+    linkCadastro: LINK_FAKE,
+  });
+  assert.equal(lang, "es");
+  assert.equal(subject, "Activá tu cuenta — Generador de Presupuestos");
+  assert.ok(html.includes("Pago confirmado"), "corpo ES: título");
+  assert.ok(html.includes("Crear mi contraseña"), "corpo ES: botão");
+  assert.ok(html.includes("expira en 24 horas"), "corpo ES: validade");
+  assert.ok(html.includes("Pro"), "es/pro deve exibir 'Pro'");
+  assert.ok(!html.includes("Completo"), "es não deve virar Completo");
+  assert.ok(!html.includes("Criar minha senha"), "não deve conter PT");
+});
+
+test("conteudoLinkCadastro: país ausente/inválido cai em ES (default legado)", () => {
+  for (const pais of [undefined, null, "", "US", "xx"]) {
+    const { lang, subject } = conteudoLinkCadastro({
+      pais,
+      planoId: "basico",
+      linkCadastro: LINK_FAKE,
+    });
+    assert.equal(lang, "es", `país ${String(pais)} deveria cair em es`);
+    assert.equal(subject, "Activá tu cuenta — Generador de Presupuestos");
+  }
+});
+
+test("conteudoLinkCadastro: o link tokenizado aparece no href e no corpo", () => {
+  for (const pais of ["BR", "AR"]) {
+    const { html } = conteudoLinkCadastro({
+      pais,
+      planoId: "pro",
+      linkCadastro: LINK_FAKE,
+    });
+    assert.ok(html.includes(`href="${LINK_FAKE}"`), `href presente (${pais})`);
+    // Também no rodapé "copie e cole" (aparece 2x no total).
+    assert.ok(
+      html.split(LINK_FAKE).length - 1 >= 2,
+      `link deve aparecer ao menos 2x (${pais})`,
+    );
+  }
+});
+
+test("escapeHtml protege o nome do plano na montagem do e-mail", () => {
+  // Garantia de que o nome (venha de onde vier) é escapado antes de ir ao HTML.
+  assert.equal(
+    escapeHtml('<img src=x onerror=alert(1)>'),
+    "&lt;img src=x onerror=alert(1)&gt;",
+  );
+});
+
+test("escapeHtml: neutraliza os caracteres perigosos", () => {
+  assert.equal(
+    escapeHtml(`<a href="x">'&'</a>`),
+    "&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;",
+  );
+  // Defensivo: valores não-string não quebram.
+  assert.equal(escapeHtml(null), "");
+  assert.equal(escapeHtml(undefined), "");
+});
+
+// ---------------------------------------------------------------------------
+// Webhook de pagamento — separação pagamento (idempotente) x onboarding
+// (recuperável) — Etapa 2 (lib/onboarding-core.js)
+// ---------------------------------------------------------------------------
+
+// Combinações possíveis de estado, para varreduras de invariante.
+const BOOLS = [false, true];
+
+test("decidirEstensaoPagamento: estende só na 1ª vez de uma renovação", () => {
+  // Renovação (tenant existe), primeira vez (não duplicado) → estende.
+  assert.equal(
+    decidirEstensaoPagamento({ pagamentoDuplicado: false, tenantExiste: true }),
+    true,
+  );
+  // Venda nova (sem tenant), primeira vez → não há vencimento a estender.
+  assert.equal(
+    decidirEstensaoPagamento({ pagamentoDuplicado: false, tenantExiste: false }),
+    false,
+  );
+});
+
+test("INVARIANTE idempotência: pagamento duplicado NUNCA estende (nem conta 2x)", () => {
+  // O ponto crítico combinado com o Philip: qualquer retentativa do Mercado Pago
+  // (pagamentoDuplicado === true) não pode disparar efeito de dinheiro —
+  // independentemente de existir tenant ou não.
+  for (const tenantExiste of BOOLS) {
+    assert.equal(
+      decidirEstensaoPagamento({ pagamentoDuplicado: true, tenantExiste }),
+      false,
+      `duplicado + tenant=${tenantExiste} deveria NÃO estender`,
+    );
+  }
+});
+
+test("decidirOnboarding: venda nova sem token → cria e envia", () => {
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: false,
+      emailConfirmado: false,
+    }),
+    "criar_e_enviar",
+  );
+});
+
+test("decidirOnboarding: RISCO B — token existe mas e-mail não confirmado → reenvia", () => {
+  // 1ª tentativa gravou o token mas o e-mail falhou; a retentativa recupera
+  // reenviando o MESMO token, sem reprocessar o pagamento.
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: true,
+      emailConfirmado: false,
+    }),
+    "reenviar",
+  );
+});
+
+test("decidirOnboarding: já entregue (token válido + e-mail confirmado) → nenhum (anti-spam)", () => {
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: true,
+      emailConfirmado: true,
+    }),
+    "nenhum",
+  );
+});
+
+test("decidirOnboarding: token expirado/ausente e e-mail nunca confirmado → cria e envia", () => {
+  // tokenUtilizavel=false cobre 'expirado' e 'usado' e 'inexistente'.
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: false,
+      emailConfirmado: false,
+    }),
+    "criar_e_enviar",
+  );
+});
+
+test("decidirOnboarding: tenant já existe → nunca envia (cliente já tem acesso)", () => {
+  for (const tokenUtilizavel of BOOLS) {
+    for (const emailConfirmado of BOOLS) {
+      assert.equal(
+        decidirOnboarding({ tenantExiste: true, tokenUtilizavel, emailConfirmado }),
+        "nenhum",
+        `tenant existe deveria ser sempre 'nenhum'`,
+      );
+    }
+  }
+});
+
+test("INVARIANTE estrutural: onboarding não depende do estado de pagamento", () => {
+  // decidirOnboarding NEM recebe pagamentoDuplicado — logo nenhuma decisão de
+  // onboarding pode disparar um efeito de pagamento. Este teste documenta e
+  // trava esse contrato: a saída independe de qualquer campo de pagamento.
+  const base = { tenantExiste: false, tokenUtilizavel: true, emailConfirmado: false };
+  const comLixoDePagamento = { ...base, pagamentoDuplicado: true, valor: 999 };
+  assert.equal(decidirOnboarding(base), decidirOnboarding(comLixoDePagamento));
+});
+
+// ---------------------------------------------------------------------------
+// Reenvio manual da ativação pelo admin — Etapa 3 (lib/onboarding-core.js)
+// ---------------------------------------------------------------------------
+
+test("forcarReenvio: reenvio manual reenvia MESMO com e-mail já confirmado (o webhook não)", () => {
+  const estado = { tenantExiste: false, tokenUtilizavel: true, emailConfirmado: true };
+  // Webhook automático (default false): anti-spam → nenhum.
+  assert.equal(decidirOnboarding(estado), "nenhum");
+  // Admin (forcarReenvio true): força o reenvio reusando o token válido.
+  assert.equal(decidirOnboarding({ ...estado, forcarReenvio: true }), "reenviar");
+});
+
+test("forcarReenvio: sem token utilizável → cria e envia um token novo (24h)", () => {
+  assert.equal(
+    decidirOnboarding({
+      tenantExiste: false,
+      tokenUtilizavel: false,
+      emailConfirmado: true,
+      forcarReenvio: true,
+    }),
+    "criar_e_enviar",
+  );
+});
+
+test("INVARIANTE forcarReenvio: tenant já ativado NUNCA reenvia, nem forçado", () => {
+  // A prioridade de tenantExiste vence forcarReenvio — não spammar quem já ativou.
+  for (const tokenUtilizavel of BOOLS) {
+    for (const emailConfirmado of BOOLS) {
+      assert.equal(
+        decidirOnboarding({
+          tenantExiste: true,
+          tokenUtilizavel,
+          emailConfirmado,
+          forcarReenvio: true,
+        }),
+        "nenhum",
+        "tenant existe deveria ser sempre 'nenhum', mesmo forçando",
+      );
+    }
+  }
+});
+
+test("decidirReenvioAtivacao: pago e sem tenant → permitido", () => {
+  assert.deepEqual(
+    decidirReenvioAtivacao({ temAssinaturaPaga: true, tenantExiste: false }),
+    { permitido: true, motivo: null },
+  );
+});
+
+test("decidirReenvioAtivacao: sem assinatura paga → bloqueado (nada a ativar)", () => {
+  for (const tenantExiste of BOOLS) {
+    assert.deepEqual(
+      decidirReenvioAtivacao({ temAssinaturaPaga: false, tenantExiste }),
+      { permitido: false, motivo: "sem_assinatura_paga" },
+    );
+  }
+});
+
+test("decidirReenvioAtivacao: já ativado (tem tenant) → bloqueado", () => {
+  assert.deepEqual(
+    decidirReenvioAtivacao({ temAssinaturaPaga: true, tenantExiste: true }),
+    { permitido: false, motivo: "ja_ativado" },
+  );
+});
+
+// --- padDeTempo: constante-tempo da rota pública de reativação --------------
+// Etapa 4: a defesa anti-enumeração por TIMING depende deste pad nunca ser
+// negativo (senão sleep negativo/loop) nem NaN. Invariante: sempre em [0, budget].
+
+test("padDeTempo: trabalho dentro do orçamento → dorme o restante", () => {
+  assert.equal(padDeTempo(1500, 400), 1100);
+});
+
+test("padDeTempo: orçamento exato → 0 (não negativo)", () => {
+  assert.equal(padDeTempo(1500, 1500), 0);
+});
+
+test("padDeTempo: trabalho EXCEDEU o orçamento → 0 (nunca negativo)", () => {
+  // O caminho lento (envio Resend acima do budget) jamais produz sleep negativo.
+  assert.equal(padDeTempo(1500, 5000), 0);
+});
+
+test("padDeTempo: entradas inválidas (NaN/negativas) nunca viram sleep inválido", () => {
+  // Robustez: nada de NaN (dormir para sempre) nem negativo, sob qualquer lixo.
+  assert.equal(padDeTempo(NaN, 100), 0);
+  assert.equal(padDeTempo(1500, NaN), 1500);
+  assert.equal(padDeTempo(1500, -200), 1500);
+  assert.equal(padDeTempo(-1, 100), 0);
+  assert.equal(padDeTempo(Infinity, 100), 0);
+});
+
+test("padDeTempo: resultado SEMPRE em [0, budget] (fuzz determinístico)", () => {
+  const budgets = [0, 1, 500, 1500, 9999];
+  const decorridos = [0, 1, 250, 1500, 3000, 100000];
+  for (const b of budgets) {
+    for (const d of decorridos) {
+      const r = padDeTempo(b, d);
+      assert.ok(r >= 0, `pad negativo: budget=${b} decorrido=${d} → ${r}`);
+      assert.ok(r <= Math.max(b, 0), `pad acima do budget: budget=${b} decorrido=${d} → ${r}`);
+    }
   }
 });
 

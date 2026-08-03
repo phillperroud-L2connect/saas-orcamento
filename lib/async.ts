@@ -21,3 +21,9 @@ export async function withTimeout<T>(
     if (timer) clearTimeout(timer);
   }
 }
+
+/** Aguarda `ms` milissegundos (usado para padronizar tempo de resposta). */
+export function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

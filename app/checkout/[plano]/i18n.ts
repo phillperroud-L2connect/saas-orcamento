@@ -9,6 +9,7 @@
  */
 
 import type { PlanoId } from "@/lib/planos";
+import { nomePlanoLocalizado } from "@/lib/planos-nomes";
 
 export type Lang = "pt" | "es";
 
@@ -167,18 +168,17 @@ export const TEXTOS: Record<Lang, Textos> = {
 };
 
 /**
- * Conteúdo dos planos por idioma (nome, descrição e recursos). A versão PT
- * espelha planos.ts — que segue sendo a fonte da verdade de preços/ids. O nome
- * exibido é localizado: no Brasil (pt) o plano Pro é apresentado como
- * "Completo"; na Argentina (es) segue "Pro".
+ * Descrição e recursos dos planos por idioma. O NOME exibido NÃO mora aqui: vem
+ * de lib/planos-nomes.js (fonte única compartilhada com os e-mails), composto em
+ * getPlanoTextos — assim renomear um plano não dessincroniza a tela do e-mail.
+ * (Localização do nome: pt → Pro = "Completo"; es → "Pro".)
  */
 const PLANO_TEXTOS: Record<
   Lang,
-  Record<PlanoId, { nome: string; descricao: string; recursos: string[] }>
+  Record<PlanoId, { descricao: string; recursos: string[] }>
 > = {
   pt: {
     basico: {
-      nome: "Básico",
       descricao:
         "Para profissionais que estão começando a organizar seus orçamentos.",
       recursos: [
@@ -189,7 +189,6 @@ const PLANO_TEXTOS: Record<
       ],
     },
     pro: {
-      nome: "Completo",
       descricao: "Para quem precisa de mais controle, marca e relatórios.",
       recursos: [
         "Tudo do plano Básico",
@@ -202,7 +201,6 @@ const PLANO_TEXTOS: Record<
   },
   es: {
     basico: {
-      nome: "Básico",
       descricao:
         "Para profesionales que están empezando a organizar sus presupuestos.",
       recursos: [
@@ -213,7 +211,6 @@ const PLANO_TEXTOS: Record<
       ],
     },
     pro: {
-      nome: "Pro",
       descricao: "Para quienes necesitan más control, marca e informes.",
       recursos: [
         "Todo lo del plan Básico",
@@ -226,7 +223,13 @@ const PLANO_TEXTOS: Record<
   },
 };
 
-/** Retorna descrição e recursos do plano no idioma escolhido. */
+/**
+ * Retorna nome (da fonte compartilhada), descrição e recursos no idioma pedido.
+ * O `nome` é composto por nomePlanoLocalizado para casar exatamente com o e-mail.
+ */
 export function getPlanoTextos(planoId: PlanoId, lang: Lang) {
-  return PLANO_TEXTOS[lang][planoId];
+  return {
+    nome: nomePlanoLocalizado(planoId, lang),
+    ...PLANO_TEXTOS[lang][planoId],
+  };
 }
