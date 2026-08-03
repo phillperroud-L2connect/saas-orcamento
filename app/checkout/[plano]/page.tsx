@@ -85,6 +85,19 @@ export default function CheckoutPage({ params, searchParams }: Props) {
         }}
       />
 
+      {/* Cabeçalho de marca — reforça confiança no topo do checkout. A tela é
+          escura (#05070d), então o logo azul/ciano aparece direto, sem faixa. */}
+      <header className="relative mx-auto flex max-w-5xl items-center px-5 pt-8 lg:pt-10">
+        <img
+          src="/logo-orcamentos.png"
+          alt="L2connect — Gerador de Orçamento"
+          width={44}
+          height={44}
+          className="h-11 w-11 select-none"
+          style={{ filter: "drop-shadow(0 4px 14px rgba(62,166,255,0.35))" }}
+        />
+      </header>
+
       <CheckoutPanel
         plano={plano}
         lang={lang}

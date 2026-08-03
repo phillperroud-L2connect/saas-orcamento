@@ -18,8 +18,21 @@ export function DashboardHeader() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <Link
           href="/dashboard"
-          className="text-sm font-bold tracking-tight text-gray-900 dark:text-gray-100"
+          className="flex items-center gap-2.5 text-sm font-bold tracking-tight text-gray-900 dark:text-gray-100"
         >
+          {/* Chip escuro da marca: o logo é azul/ciano transparente, feito para
+              brilhar no escuro. O header é branco no tema claro, então o símbolo
+              fica sempre sobre #05070d — legível em ambos os temas. O texto ao
+              lado já nomeia o link, então a imagem é decorativa (alt=""). */}
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#05070d] ring-1 ring-black/5 dark:ring-white/10">
+            <img
+              src="/logo-orcamentos.png"
+              alt=""
+              width={20}
+              height={20}
+              className="size-5 select-none"
+            />
+          </span>
           {dict.nav.orcamentos}
         </Link>
 
