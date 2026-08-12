@@ -49,6 +49,7 @@ export default function CheckoutPage({ params, searchParams }: Props) {
   if (!plano) notFound();
 
   const lang = resolverLang(searchParams?.lang);
+  const t = TEXTOS[lang];
   // País da assinatura deriva do idioma do checkout (es → AR, pt → BR). Define a
   // gaveta de credenciais: a public key do Wallet Brick precisa ser da MESMA
   // conta (AR/BR) em que a preferência é criada em /api/mp/criar-preferencia.
@@ -86,8 +87,10 @@ export default function CheckoutPage({ params, searchParams }: Props) {
       />
 
       {/* Cabeçalho de marca — reforça confiança no topo do checkout. A tela é
-          escura (#05070d), então o logo azul/ciano aparece direto, sem faixa. */}
-      <header className="relative mx-auto flex max-w-5xl items-center px-5 pt-8 lg:pt-10">
+          escura (#05070d), então o logo azul/ciano aparece direto, sem faixa.
+          O eyebrow "— CHECKOUT" fica na MESMA linha do logo (centrados
+          verticalmente entre si), em desktop e mobile. */}
+      <header className="relative mx-auto flex max-w-5xl items-center gap-3 px-5 pt-8 lg:pt-10">
         <img
           src="/logo-orcamentos.png"
           alt="L2connect — Gerador de Orçamento"
@@ -96,6 +99,13 @@ export default function CheckoutPage({ params, searchParams }: Props) {
           className="h-11 w-11 select-none"
           style={{ filter: "drop-shadow(0 4px 14px rgba(62,166,255,0.35))" }}
         />
+        <p
+          className="inline-flex items-center gap-2.5 text-xs font-medium uppercase tracking-[0.18em] text-[#6ee0ff]"
+          style={{ fontFamily: "var(--font-l2-mono), monospace" }}
+        >
+          <span className="h-px w-6 bg-[#6ee0ff]" />
+          {t.eyebrow}
+        </p>
       </header>
 
       <CheckoutPanel
