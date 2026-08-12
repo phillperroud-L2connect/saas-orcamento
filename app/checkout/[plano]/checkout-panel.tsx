@@ -40,17 +40,18 @@ export function CheckoutPanel({ plano, lang, pais, publicKey }: Props) {
     <div className="relative mx-auto grid max-w-5xl gap-10 px-5 py-12 lg:grid-cols-[1.1fr_1fr] lg:py-20">
       {/* ----------------------------- Resumo do plano ---------------------- */}
       <section className="lg:pr-8">
-        <p
-          className="inline-flex items-center gap-2.5 text-xs font-medium uppercase tracking-[0.18em] text-[#6ee0ff]"
-          style={{ fontFamily: "var(--font-l2-mono), monospace" }}
+        {/* Título sempre em UMA linha ("Plano Completo", "Plan Pro"…). O corpo
+            é fluido: acompanha a largura útil da tela (100vw menos o px-5 dos
+            dois lados e uma folga para a barra de rolagem) dividida pela
+            extensão do título mais longo — assim cabe no mobile estreito (320px)
+            sem quebrar nem vazar, e no desktop trava em 3.75rem (o text-6xl de
+            antes), tamanho que a coluna comporta em uma linha.
+            O eyebrow "— CHECKOUT" mora no cabeçalho, ao lado do logo. */}
+        <h1
+          className="whitespace-nowrap font-medium leading-[1.05] tracking-tight"
+          style={{ fontSize: "clamp(2rem, calc((100vw - 3.5rem) / 8), 3.75rem)" }}
         >
-          <span className="h-px w-6 bg-[#6ee0ff]" />
-          {t.eyebrow}
-        </p>
-
-        <h1 className="mt-5 text-5xl font-medium leading-[0.95] tracking-tight sm:text-6xl">
-          {t.planoLabel}
-          <br />
+          {t.planoLabel}{" "}
           <span
             style={{
               backgroundImage:
