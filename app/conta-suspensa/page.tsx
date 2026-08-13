@@ -46,7 +46,7 @@ export default function ContaSuspensaPage() {
 
         <div className="mt-6 flex flex-col gap-3">
           <a
-            href="mailto:phillperroud@gmail.com?subject=Reativar%20acesso%20-%20Gerador%20de%20Orçamento"
+            href="mailto:atendimento@l2connect.com.br?subject=Reativar%20acesso%20-%20Gerador%20de%20Orçamento"
             className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
           >
             Falar com o suporte

@@ -113,6 +113,33 @@ moeda — o único que exibia informação errada — já foi feita. Pendentes:
   (`assinaturas`) não tinha país. Agora que `assinaturas.moeda` existe, dá para
   inferir o país pela moeda (BRL → BR) ou incluir na query.
 
+### 4. Migrar o e-mail de identidade do admin para o domínio (baixa prioridade)
+
+_Sem relação com o Mercado Pago — registrado aqui em 2026-08-12 por ser o backlog
+vivo do projeto._
+
+O login do painel admin é identificado por `phillperroud@gmail.com`, repetido
+**em 4 pontos que precisam estar sincronizados**:
+
+- `lib/admin.ts:11` — `ADMIN_EMAIL`, comparado com o e-mail do JWT em
+  `isAdminEmail()`; é o que libera `/admin` no middleware e no layout do servidor.
+- `supabase-admin.sql:24,25,46,50` — policies RLS chaveadas no mesmo e-mail.
+- `supabase-assinaturas.sql:47,48` — idem.
+- `supabase-tokens-onboarding.sql:66,67` — idem.
+
+Está **correto onde está**: é identidade de login, não contato de cliente (os
+contatos de cliente foram todos migrados para `atendimento@l2connect.com.br`).
+A dívida é só o acoplamento: se um dia o login migrar para um endereço do
+domínio, os 4 pontos têm de mudar **na mesma janela**, e o usuário do Supabase
+Auth precisa ser recriado/atualizado com o novo e-mail antes do deploy —
+
+- trocar só `lib/admin.ts` → você fica trancado fora do `/admin`;
+- trocar só o SQL → a RLS deixa de reconhecer o login.
+
+Não confundir com `lib/email.ts:24` (`ADMIN_NOTIFY`): aquele é o **destinatário**
+da notificação interna de venda, tem override por `ADMIN_NOTIFY_EMAIL` no
+ambiente e pode ser trocado sozinho, sem coordenação.
+
 ---
 
 ## ✅ Detecção de país por IP — CONCLUÍDA (ver detalhes em "Concluído" acima)
